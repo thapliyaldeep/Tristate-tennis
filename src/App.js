@@ -7,17 +7,35 @@ const BIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 // Generate May 1 – July 5, 2026
 function genDates() {
   const dates = [], days = [], dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-  const start = new Date(2026, 4, 1); // May 1
-  const end   = new Date(2026, 6, 5); // July 5
+  const start = new Date(2026, 4, 1);
+  const end   = new Date(2026, 6, 5);
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     dates.push(`${d.getMonth()+1}/${d.getDate()}`);
     days.push(dayNames[d.getDay()]);
   }
   return { dates, days };
 }
-const { dates: DATES, days: DAYS } = genDates();
+const { dates: ALL_DATES, days: ALL_DAYS } = genDates();
 const DOUBLES = ["Nitin/Ashish","Jai/Deep","Tarun/Sumit","Bobby/Satendra","Akash/Micky","Dhar/Vineet","Sanjay/Ravi"];
 const SINGLES = ["Ashish","Deep","Sumit","Bobby","Akash","Dharam","Sanjay","Pratush","Viraj","Tushar"];
+
+// Fix 1: Only future dates (today onwards) for availability selection
+function futureDates() {
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  return ALL_DATES.filter((d, i) => {
+    const [m, day] = d.split("/").map(Number);
+    const dt = new Date(2026, m-1, day);
+    return dt >= today;
+  });
+}
+
+// Fix 4: Check if a completed match is still editable (within 24h of completion)
+function isEditable(m) {
+  if (!m.done) return true;
+  if (!m.completedAt) return false; // no timestamp = locked
+  return Date.now() - m.completedAt < 24 * 60 * 60 * 1000;
+}
 
 async function dbLoad() {
   try {
@@ -84,12 +102,16 @@ function Modal({ title, onClose, children }) {
   );
 }
 
-function MatchCard({ m, done, onScore, onDel }) {
+function MatchCard({ m, onScore, onDel }) {
+  const done = m.done;
   const wa = done ? calcWins(m.sa) : null;
   const wb = done ? calcWins(m.sb) : null;
   const winner = wa && wb ? (wa.w > wb.w ? m.a : m.b) : null;
+  const editable = isEditable(m);
+  const locked = done && !editable;
+
   return (
-    <div style={{ background:"#111827", border:`1px solid ${done?"#14532d55":"#334155"}`, borderRadius:10, padding:"14px 16px", marginBottom:10, display:"flex", alignItems:"center", gap:16, flexWrap:"wrap" }}>
+    <div style={{ background:"#111827", border:`1px solid ${locked?"#2d1f00":done?"#14532d55":"#334155"}`, borderRadius:10, padding:"14px 16px", marginBottom:10, display:"flex", alignItems:"center", gap:16, flexWrap:"wrap" }}>
       <div style={{ flex:1, minWidth:180, display:"flex", alignItems:"center", gap:12 }}>
         <div style={{ flex:1 }}>
           <div style={{ fontWeight:700, fontSize:14, color:winner===m.a?"#34d399":"#cbd5e1" }}>{m.a}</div>
@@ -104,9 +126,15 @@ function MatchCard({ m, done, onScore, onDel }) {
       <div style={{ textAlign:"right" }}>
         <div style={{ fontSize:12, color:"#64748b" }}>{m.date}{m.time?` · ${m.time}`:""}</div>
         {done && winner && <div style={{ fontSize:12, color:"#10b981", marginTop:3 }}>🏆 {winner}</div>}
+        {locked && <div style={{ fontSize:11, color:"#f59e0b", marginTop:3 }}>🔒 Locked after 24h</div>}
         <div style={{ display:"flex", gap:8, marginTop:10, justifyContent:"flex-end" }}>
-          <button onClick={onScore} style={{ padding:"6px 12px", background:"#1e3a5f", border:"none", borderRadius:6, color:"#93c5fd", fontSize:12, cursor:"pointer" }}>{done?"✏️ Edit":"📝 Score"}</button>
-          <button onClick={onDel}   style={{ padding:"6px 10px", background:"#2d1515", border:"none", borderRadius:6, color:"#f87171", fontSize:12, cursor:"pointer" }}>🗑</button>
+          {/* Fix 4: hide edit button if locked */}
+          {!locked && (
+            <button onClick={onScore} style={{ padding:"6px 12px", background:"#1e3a5f", border:"none", borderRadius:6, color:"#93c5fd", fontSize:12, cursor:"pointer" }}>
+              {done ? "✏️ Edit" : "📝 Score"}
+            </button>
+          )}
+          <button onClick={onDel} style={{ padding:"6px 10px", background:"#2d1515", border:"none", borderRadius:6, color:"#f87171", fontSize:12, cursor:"pointer" }}>🗑</button>
         </div>
       </div>
     </div>
@@ -115,12 +143,16 @@ function MatchCard({ m, done, onScore, onDel }) {
 
 export default function App() {
   const [data,   setData]   = useState(null);
-  const [status, setStatus] = useState("loading"); // loading | ok | saving | error
+  const [status, setStatus] = useState("loading");
   const [tab,    setTab]    = useState("schedule");
   const [lg,     setLg]     = useState("doubles");
   const [modal,  setModal]  = useState(null);
   const [mf,     setMf]     = useState({});
   const saveTimer = useRef(null);
+
+  // Fix 1: compute future dates once
+  const FUTURE_DATES = futureDates();
+  const defaultDate  = FUTURE_DATES[0] || ALL_DATES[0];
 
   useEffect(() => {
     dbLoad().then(r => {
@@ -137,7 +169,7 @@ export default function App() {
     saveTimer.current = setTimeout(async () => {
       await dbSave(nd);
       setStatus("ok");
-    }, 600); // debounce rapid clicks
+    }, 600);
   }
 
   if (status === "loading") return (
@@ -146,7 +178,7 @@ export default function App() {
     </div>
   );
   if (status === "error") return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#0f172a", color:"#ef4444", fontSize:15 }}>
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#0f172a", color:"#ef4444", fontSize:15, textAlign:"center", padding:24 }}>
       ❌ Could not load data. Check your connection and refresh.
     </div>
   );
@@ -161,7 +193,7 @@ export default function App() {
 
   function addMatch() {
     upd(d => {
-      const m = { id:isD?`d${d.did}`:`s${d.sid}`, a:mf.a, b:mf.b, date:mf.date||DATES[0], time:mf.time||"", sa:"", sb:"", done:false };
+      const m = { id:isD?`d${d.did}`:`s${d.sid}`, a:mf.a, b:mf.b, date:mf.date||defaultDate, time:mf.time||"", sa:"", sb:"", done:false };
       return isD ? {...d, dMatches:[...d.dMatches,m], did:d.did+1} : {...d, sMatches:[...d.sMatches,m], sid:d.sid+1};
     });
     setModal(null);
@@ -170,10 +202,13 @@ export default function App() {
     upd(d => isD ? {...d, dMatches:d.dMatches.filter(m=>m.id!==id)} : {...d, sMatches:d.sMatches.filter(m=>m.id!==id)});
   }
   function saveScore() {
-    upd(d => isD
-      ? {...d, dMatches:d.dMatches.map(m=>m.id===mf.id?{...m,sa:mf.sa,sb:mf.sb,done:true}:m)}
-      : {...d, sMatches:d.sMatches.map(m=>m.id===mf.id?{...m,sa:mf.sa,sb:mf.sb,done:true}:m)}
-    );
+    upd(d => {
+      // Fix 4: stamp completedAt timestamp when saving score
+      const stamp = Date.now();
+      return isD
+        ? {...d, dMatches:d.dMatches.map(m=>m.id===mf.id?{...m,sa:mf.sa,sb:mf.sb,done:true,completedAt:m.completedAt||stamp}:m)}
+        : {...d, sMatches:d.sMatches.map(m=>m.id===mf.id?{...m,sa:mf.sa,sb:mf.sb,done:true,completedAt:m.completedAt||stamp}:m)};
+    });
     setModal(null);
   }
   function addAvail() {
@@ -189,7 +224,11 @@ export default function App() {
 
   return (
     <div style={{ minHeight:"100vh", background:"#0f172a", color:"#e2e8f0", fontFamily:"system-ui,sans-serif" }}>
-      <style>{`*{box-sizing:border-box} select,input{color-scheme:dark} button:disabled{opacity:.4;cursor:not-allowed}`}</style>
+      <style>{`
+        * { box-sizing:border-box }
+        select, input { color-scheme:dark }
+        button:disabled { opacity:.4; cursor:not-allowed }
+      `}</style>
 
       {/* Header */}
       <div style={{ background:"#0a1020", borderBottom:"1px solid #1e293b", padding:"14px 16px 0" }}>
@@ -226,7 +265,7 @@ export default function App() {
           <div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
               <div style={{ fontWeight:700, color:"#fff" }}>Availability Grid</div>
-              <button style={pbtn} onClick={()=>{setModal("match");setMf({a:"",b:"",date:DATES[0],time:""});}}>+ Schedule Match</button>
+              <button style={pbtn} onClick={()=>{setModal("match");setMf({a:"",b:"",date:defaultDate,time:""});}}>+ Schedule Match</button>
             </div>
 
             {pending.length > 0 && (
@@ -244,25 +283,32 @@ export default function App() {
               </div>
             )}
 
+            {/* Fix 2: sticky first column via CSS on the wrapper + position:sticky on td/th */}
             <div style={{ overflowX:"auto", border:"1px solid #1e293b", borderRadius:8 }}>
               <table style={{ borderCollapse:"collapse", minWidth:700, width:"100%" }}>
                 <thead>
                   <tr style={{ background:"#0a1020" }}>
-                    <th style={{ padding:"9px 12px", textAlign:"left", color:"#64748b", fontSize:11, fontWeight:600, textTransform:"uppercase", letterSpacing:.5, borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>{isD?"Team":"Player"}</th>
-                    {DATES.map((d,i) => (
+                    {/* Fix 2: sticky name header */}
+                    <th style={{ padding:"9px 12px", textAlign:"left", color:"#64748b", fontSize:11, fontWeight:600, textTransform:"uppercase", letterSpacing:.5, borderBottom:"1px solid #1e293b", whiteSpace:"nowrap", position:"sticky", left:0, zIndex:2, background:"#0a1020" }}>
+                      {isD?"Team":"Player"}
+                    </th>
+                    {ALL_DATES.map((d,i) => (
                       <th key={d} style={{ padding:"9px 4px", color:"#64748b", fontSize:11, fontWeight:600, borderBottom:"1px solid #1e293b", textAlign:"center", minWidth:64 }}>
                         <div style={{ color:"#93c5fd" }}>{d}</div>
-                        <div>{DAYS[i]}</div>
+                        <div>{ALL_DAYS[i]}</div>
                       </th>
                     ))}
-                    <th style={{ padding:"9px 4px", borderBottom:"1px solid #1e293b", width:36 }}></th>
+                    <th style={{ padding:"9px 4px", borderBottom:"1px solid #1e293b", width:36, position:"sticky", right:0, background:"#0a1020" }}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {teams.map((name, ri) => (
                     <tr key={name} style={{ background:ri%2===0?"#111827":"#0f172a" }}>
-                      <td style={{ padding:"8px 12px", fontWeight:700, color:"#cbd5e1", fontSize:13, borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>{name}</td>
-                      {DATES.map(d => {
+                      {/* Fix 2: sticky name cell */}
+                      <td style={{ padding:"8px 12px", fontWeight:700, color:"#cbd5e1", fontSize:13, borderBottom:"1px solid #1e293b", whiteSpace:"nowrap", position:"sticky", left:0, zIndex:1, background:ri%2===0?"#111827":"#0f172a" }}>
+                        {name}
+                      </td>
+                      {ALL_DATES.map(d => {
                         const note = avail[name]?.[d];
                         const booked = note && /w\//i.test(note);
                         return (
@@ -274,8 +320,8 @@ export default function App() {
                           </td>
                         );
                       })}
-                      <td style={{ padding:"3px 4px", borderBottom:"1px solid #1e293b", textAlign:"center" }}>
-                        <button onClick={()=>{setModal("avail");setMf({name,date:DATES[0],note:""}); }} style={{ background:"none", border:"1px solid #334155", borderRadius:5, color:"#64748b", cursor:"pointer", padding:"2px 7px", fontSize:14, lineHeight:1.5 }}>+</button>
+                      <td style={{ padding:"3px 4px", borderBottom:"1px solid #1e293b", textAlign:"center", position:"sticky", right:0, background:ri%2===0?"#111827":"#0f172a" }}>
+                        <button onClick={()=>{setModal("avail");setMf({name,date:defaultDate,note:""}); }} style={{ background:"none", border:"1px solid #334155", borderRadius:5, color:"#64748b", cursor:"pointer", padding:"2px 7px", fontSize:14, lineHeight:1.5 }}>+</button>
                       </td>
                     </tr>
                   ))}
@@ -291,7 +337,7 @@ export default function App() {
           <div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
               <div style={{ fontWeight:700, color:"#fff" }}>Match Results</div>
-              <button style={pbtn} onClick={()=>{setModal("match");setMf({a:"",b:"",date:DATES[0],time:""});}}>+ Add Match</button>
+              <button style={pbtn} onClick={()=>{setModal("match");setMf({a:"",b:"",date:defaultDate,time:""});}}>+ Add Match</button>
             </div>
             {matches.length===0 && <div style={{ textAlign:"center", color:"#64748b", padding:"60px 0" }}>No matches yet.</div>}
             {pending.length > 0 && (
@@ -303,7 +349,7 @@ export default function App() {
             {complete.length > 0 && (
               <div>
                 <div style={{ fontSize:11, color:"#64748b", textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>Completed</div>
-                {complete.map(m => <MatchCard key={m.id} m={m} done onScore={()=>{setModal("score");setMf({id:m.id,a:m.a,b:m.b,date:m.date,time:m.time,sa:m.sa,sb:m.sb});}} onDel={()=>delMatch(m.id)} />)}
+                {complete.map(m => <MatchCard key={m.id} m={m} onScore={()=>{setModal("score");setMf({id:m.id,a:m.a,b:m.b,date:m.date,time:m.time,sa:m.sa,sb:m.sb});}} onDel={()=>delMatch(m.id)} />)}
               </div>
             )}
           </div>
@@ -317,25 +363,38 @@ export default function App() {
               ? <div style={{ textAlign:"center", color:"#64748b", padding:"60px 0" }}>No completed matches yet — enter scores to see rankings.</div>
               : (
                 <>
+                  {/* Fix 3: correct podium heights — gold tallest, silver middle, bronze shortest */}
                   <div style={{ display:"flex", justifyContent:"center", alignItems:"flex-end", gap:12, marginBottom:32 }}>
-                    {[1,0,2].map(idx => {
+                    {(() => {
                       const played = stand.filter(s=>s.p>0);
-                      const s = played[idx];
-                      if (!s) return <div key={idx} style={{ width:110 }} />;
-                      const H = [170,130,100];
-                      const C = ["#FFD700","#C0C0C0","#CD7F32"];
-                      const E = ["🥇","🥈","🥉"];
-                      const rank = idx===1?0:idx===0?1:2;
-                      return (
-                        <div key={s.n} style={{ textAlign:"center", width:120 }}>
-                          <div style={{ fontSize:26 }}>{E[idx]}</div>
-                          <div style={{ fontWeight:700, fontSize:12, color:"#e2e8f0", margin:"4px 0 2px" }}>{s.n}</div>
-                          <div style={{ fontSize:11, color:"#64748b", marginBottom:8 }}>{s.pts}pts · {s.w}W {s.l}L</div>
-                          <div style={{ height:H[rank], borderRadius:"6px 6px 0 0", background:`${C[idx]}18`, border:`2px solid ${C[idx]}55`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, fontWeight:900, color:C[idx] }}>{idx+1}</div>
-                        </div>
-                      );
-                    })}
+                      // Display order: silver(1st), gold(0th), bronze(2nd)
+                      const displayOrder = [1, 0, 2];
+                      // Heights: gold=180, silver=130, bronze=90
+                      const heightMap = { 0: 180, 1: 130, 2: 90 };
+                      const colors    = ["#FFD700","#C0C0C0","#CD7F32"];
+                      const medals    = ["🥇","🥈","🥉"];
+                      return displayOrder.map(rank => {
+                        const s = played[rank];
+                        if (!s) return <div key={rank} style={{ width:120 }} />;
+                        return (
+                          <div key={s.n} style={{ textAlign:"center", width:120 }}>
+                            <div style={{ fontSize:26 }}>{medals[rank]}</div>
+                            <div style={{ fontWeight:700, fontSize:12, color:"#e2e8f0", margin:"4px 0 2px" }}>{s.n}</div>
+                            <div style={{ fontSize:11, color:"#64748b", marginBottom:8 }}>{s.pts}pts · {s.w}W {s.l}L</div>
+                            <div style={{
+                              height: heightMap[rank],
+                              borderRadius:"6px 6px 0 0",
+                              background:`${colors[rank]}18`,
+                              border:`2px solid ${colors[rank]}88`,
+                              display:"flex", alignItems:"center", justifyContent:"center",
+                              fontSize:28, fontWeight:900, color:colors[rank],
+                            }}>{rank+1}</div>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
+
                   <div style={{ border:"1px solid #1e293b", borderRadius:8, overflow:"hidden" }}>
                     <table style={{ width:"100%", borderCollapse:"collapse" }}>
                       <thead>
@@ -380,8 +439,8 @@ export default function App() {
             {teams.filter(t=>t!==mf.a).map(t=><option key={t} value={t}>{t}</option>)}
           </select>
           <label style={lbl}>Date</label>
-          <select style={inp} value={mf.date||DATES[0]} onChange={e=>setMf(f=>({...f,date:e.target.value}))}>
-            {DATES.map((d,i)=><option key={d} value={d}>{d} ({DAYS[i]})</option>)}
+          <select style={inp} value={mf.date||defaultDate} onChange={e=>setMf(f=>({...f,date:e.target.value}))}>
+            {ALL_DATES.map((d,i)=><option key={d} value={d}>{d} ({ALL_DAYS[i]})</option>)}
           </select>
           <label style={lbl}>Time</label>
           <input style={inp} placeholder="e.g. 5:30pm" value={mf.time||""} onChange={e=>setMf(f=>({...f,time:e.target.value}))} />
@@ -410,16 +469,23 @@ export default function App() {
         </Modal>
       )}
 
+      {/* Fix 1: availability date dropdown shows only future dates */}
       {modal==="avail" && (
         <Modal title={`Add Availability — ${mf.name}`} onClose={()=>setModal(null)}>
           <label style={lbl}>Date</label>
-          <select style={inp} value={mf.date||DATES[0]} onChange={e=>setMf(f=>({...f,date:e.target.value}))}>
-            {DATES.map((d,i)=><option key={d} value={d}>{d} ({DAYS[i]})</option>)}
-          </select>
+          {FUTURE_DATES.length === 0
+            ? <div style={{ color:"#64748b", fontSize:13, marginTop:8 }}>No future dates available in the league window.</div>
+            : <select style={inp} value={mf.date||defaultDate} onChange={e=>setMf(f=>({...f,date:e.target.value}))}>
+                {FUTURE_DATES.map((d,i) => {
+                  const globalIdx = ALL_DATES.indexOf(d);
+                  return <option key={d} value={d}>{d} ({ALL_DAYS[globalIdx]})</option>;
+                })}
+              </select>
+          }
           <label style={lbl}>Note</label>
           <input style={inp} placeholder="e.g. 6pm available" value={mf.note||""} onChange={e=>setMf(f=>({...f,note:e.target.value}))} />
           <div style={{ display:"flex", gap:8, marginTop:18 }}>
-            <button style={pbtn} disabled={!mf.note} onClick={addAvail}>Add</button>
+            <button style={pbtn} disabled={!mf.note||FUTURE_DATES.length===0} onClick={addAvail}>Add</button>
             <button style={sbtn} onClick={()=>setModal(null)}>Cancel</button>
           </div>
         </Modal>
