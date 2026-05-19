@@ -1,0 +1,429 @@
+import { useState, useEffect, useRef } from "react";
+
+const BIN_ID  = "6a0bd37eee5a733b12e0efcb";
+const API_KEY = "$2a$10$Uv2k9R4NLWgKfOeNNFGWLOON/Sg3JuUej7kt9stjDrpCp4y8/TT5e";
+const BIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+
+// Generate May 1 – July 5, 2026
+function genDates() {
+  const dates = [], days = [], dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const start = new Date(2026, 4, 1); // May 1
+  const end   = new Date(2026, 6, 5); // July 5
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    dates.push(`${d.getMonth()+1}/${d.getDate()}`);
+    days.push(dayNames[d.getDay()]);
+  }
+  return { dates, days };
+}
+const { dates: DATES, days: DAYS } = genDates();
+const DOUBLES = ["Nitin/Ashish","Jai/Deep","Tarun/Sumit","Bobby/Satendra","Akash/Micky","Dhar/Vineet","Sanjay/Ravi"];
+const SINGLES = ["Ashish","Deep","Sumit","Bobby","Akash","Dharam","Sanjay","Pratush","Viraj","Tushar"];
+
+async function dbLoad() {
+  try {
+    const r = await fetch(BIN_URL + "/latest", {
+      headers: { "X-Master-Key": API_KEY, "X-Bin-Meta": "false" }
+    });
+    return await r.json();
+  } catch { return null; }
+}
+
+async function dbSave(data) {
+  try {
+    await fetch(BIN_URL, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Master-Key": API_KEY },
+      body: JSON.stringify(data),
+    });
+  } catch {}
+}
+
+function calcWins(score) {
+  if (!score) return null;
+  let w = 0, l = 0;
+  for (const s of score.trim().split(/\s+/)) {
+    const m = s.match(/^(\d+)-(\d+)$/);
+    if (!m) return null;
+    +m[1] > +m[2] ? w++ : l++;
+  }
+  return { w, l };
+}
+
+function calcStandings(matches, players) {
+  const st = {};
+  players.forEach(p => { st[p] = { p:0, w:0, l:0, pts:0 }; });
+  for (const m of matches) {
+    if (!m.done) continue;
+    const wa = calcWins(m.sa), wb = calcWins(m.sb);
+    if (!wa || !wb) continue;
+    if (!st[m.a]) st[m.a] = { p:0, w:0, l:0, pts:0 };
+    if (!st[m.b]) st[m.b] = { p:0, w:0, l:0, pts:0 };
+    st[m.a].p++; st[m.b].p++;
+    if (wa.w > wb.w) { st[m.a].w++; st[m.a].pts+=3; st[m.b].l++; }
+    else             { st[m.b].w++; st[m.b].pts+=3; st[m.a].l++; }
+  }
+  return Object.entries(st).map(([n,v])=>({n,...v})).sort((a,b)=>b.pts-a.pts||b.w-a.w);
+}
+
+const inp  = { width:"100%", padding:"9px 11px", background:"#0f172a", border:"1px solid #334155", borderRadius:7, color:"#e2e8f0", fontSize:13, outline:"none", boxSizing:"border-box" };
+const pbtn = { padding:"8px 16px", background:"#3b82f6", border:"none", borderRadius:7, color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer" };
+const sbtn = { padding:"8px 16px", background:"#1e293b", border:"none", borderRadius:7, color:"#64748b", fontSize:13, cursor:"pointer" };
+const lbl  = { display:"block", fontSize:11, color:"#64748b", marginBottom:5, marginTop:12, textTransform:"uppercase", letterSpacing:.5 };
+
+function Modal({ title, onClose, children }) {
+  return (
+    <div style={{ position:"fixed", inset:0, background:"#000a", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, padding:16 }}>
+      <div style={{ background:"#1e293b", borderRadius:12, padding:"22px 24px", width:"100%", maxWidth:400, border:"1px solid #334155" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+          <span style={{ fontWeight:700, fontSize:15, color:"#e2e8f0" }}>{title}</span>
+          <button onClick={onClose} style={{ background:"none", border:"none", color:"#64748b", fontSize:20, cursor:"pointer", lineHeight:1 }}>×</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function MatchCard({ m, done, onScore, onDel }) {
+  const wa = done ? calcWins(m.sa) : null;
+  const wb = done ? calcWins(m.sb) : null;
+  const winner = wa && wb ? (wa.w > wb.w ? m.a : m.b) : null;
+  return (
+    <div style={{ background:"#111827", border:`1px solid ${done?"#14532d55":"#334155"}`, borderRadius:10, padding:"14px 16px", marginBottom:10, display:"flex", alignItems:"center", gap:16, flexWrap:"wrap" }}>
+      <div style={{ flex:1, minWidth:180, display:"flex", alignItems:"center", gap:12 }}>
+        <div style={{ flex:1 }}>
+          <div style={{ fontWeight:700, fontSize:14, color:winner===m.a?"#34d399":"#cbd5e1" }}>{m.a}</div>
+          {done && <div style={{ fontSize:17, fontWeight:800, color:winner===m.a?"#34d399":"#475569", letterSpacing:1 }}>{m.sa}</div>}
+        </div>
+        <div style={{ color:"#475569", fontSize:11, fontWeight:700 }}>VS</div>
+        <div style={{ flex:1, textAlign:"right" }}>
+          <div style={{ fontWeight:700, fontSize:14, color:winner===m.b?"#34d399":"#cbd5e1" }}>{m.b}</div>
+          {done && <div style={{ fontSize:17, fontWeight:800, color:winner===m.b?"#34d399":"#475569", letterSpacing:1, textAlign:"right" }}>{m.sb}</div>}
+        </div>
+      </div>
+      <div style={{ textAlign:"right" }}>
+        <div style={{ fontSize:12, color:"#64748b" }}>{m.date}{m.time?` · ${m.time}`:""}</div>
+        {done && winner && <div style={{ fontSize:12, color:"#10b981", marginTop:3 }}>🏆 {winner}</div>}
+        <div style={{ display:"flex", gap:8, marginTop:10, justifyContent:"flex-end" }}>
+          <button onClick={onScore} style={{ padding:"6px 12px", background:"#1e3a5f", border:"none", borderRadius:6, color:"#93c5fd", fontSize:12, cursor:"pointer" }}>{done?"✏️ Edit":"📝 Score"}</button>
+          <button onClick={onDel}   style={{ padding:"6px 10px", background:"#2d1515", border:"none", borderRadius:6, color:"#f87171", fontSize:12, cursor:"pointer" }}>🗑</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  const [data,   setData]   = useState(null);
+  const [status, setStatus] = useState("loading"); // loading | ok | saving | error
+  const [tab,    setTab]    = useState("schedule");
+  const [lg,     setLg]     = useState("doubles");
+  const [modal,  setModal]  = useState(null);
+  const [mf,     setMf]     = useState({});
+  const saveTimer = useRef(null);
+
+  useEffect(() => {
+    dbLoad().then(r => {
+      if (r) { setData(r); setStatus("ok"); }
+      else setStatus("error");
+    });
+  }, []);
+
+  async function upd(fn) {
+    const nd = fn(data);
+    setData(nd);
+    setStatus("saving");
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      await dbSave(nd);
+      setStatus("ok");
+    }, 600); // debounce rapid clicks
+  }
+
+  if (status === "loading") return (
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#0f172a", color:"#64748b", fontSize:15 }}>
+      🎾 Loading league data…
+    </div>
+  );
+  if (status === "error") return (
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#0f172a", color:"#ef4444", fontSize:15 }}>
+      ❌ Could not load data. Check your connection and refresh.
+    </div>
+  );
+
+  const isD     = lg === "doubles";
+  const teams   = isD ? DOUBLES : SINGLES;
+  const avail   = isD ? data.dAvail  : data.sAvail;
+  const matches = isD ? data.dMatches: data.sMatches;
+  const stand   = calcStandings(matches, teams);
+  const pending  = matches.filter(m => !m.done);
+  const complete = matches.filter(m =>  m.done);
+
+  function addMatch() {
+    upd(d => {
+      const m = { id:isD?`d${d.did}`:`s${d.sid}`, a:mf.a, b:mf.b, date:mf.date||DATES[0], time:mf.time||"", sa:"", sb:"", done:false };
+      return isD ? {...d, dMatches:[...d.dMatches,m], did:d.did+1} : {...d, sMatches:[...d.sMatches,m], sid:d.sid+1};
+    });
+    setModal(null);
+  }
+  function delMatch(id) {
+    upd(d => isD ? {...d, dMatches:d.dMatches.filter(m=>m.id!==id)} : {...d, sMatches:d.sMatches.filter(m=>m.id!==id)});
+  }
+  function saveScore() {
+    upd(d => isD
+      ? {...d, dMatches:d.dMatches.map(m=>m.id===mf.id?{...m,sa:mf.sa,sb:mf.sb,done:true}:m)}
+      : {...d, sMatches:d.sMatches.map(m=>m.id===mf.id?{...m,sa:mf.sa,sb:mf.sb,done:true}:m)}
+    );
+    setModal(null);
+  }
+  function addAvail() {
+    upd(d => { const k=isD?"dAvail":"sAvail"; return {...d,[k]:{...d[k],[mf.name]:{...(d[k][mf.name]||{}),[mf.date]:mf.note}}}; });
+    setModal(null);
+  }
+  function removeAvail(name, date) {
+    upd(d => { const k=isD?"dAvail":"sAvail"; const row={...(d[k][name]||{})}; delete row[date]; return {...d,[k]:{...d[k],[name]:row}}; });
+  }
+
+  const statusColor = { ok:"#10b981", saving:"#f59e0b", error:"#ef4444" }[status] || "#64748b";
+  const statusText  = { ok:"✓ Saved", saving:"💾 Saving…", error:"⚠ Save failed" }[status];
+
+  return (
+    <div style={{ minHeight:"100vh", background:"#0f172a", color:"#e2e8f0", fontFamily:"system-ui,sans-serif" }}>
+      <style>{`*{box-sizing:border-box} select,input{color-scheme:dark} button:disabled{opacity:.4;cursor:not-allowed}`}</style>
+
+      {/* Header */}
+      <div style={{ background:"#0a1020", borderBottom:"1px solid #1e293b", padding:"14px 16px 0" }}>
+        <div style={{ maxWidth:960, margin:"0 auto" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <span style={{ fontSize:24 }}>🎾</span>
+              <div>
+                <div style={{ fontWeight:800, fontSize:16, color:"#fff" }}>Tristate Tennis 2026</div>
+                <div style={{ fontSize:11, color:"#64748b" }}>May 1 – July 5, 2026 · Shared League Manager</div>
+              </div>
+            </div>
+            <span style={{ fontSize:11, color:statusColor }}>{statusText}</span>
+          </div>
+          <div style={{ display:"flex", gap:2 }}>
+            {[["schedule","📅 Schedule"],["scores","🎯 Scores"],["leaderboard","🏆 Standings"]].map(([id,label]) => (
+              <button key={id} onClick={()=>setTab(id)} style={{ padding:"8px 16px", border:"none", cursor:"pointer", borderRadius:"6px 6px 0 0", background:tab===id?"#1e293b":"transparent", color:tab===id?"#fff":"#64748b", fontWeight:tab===id?700:400, fontSize:13 }}>{label}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ maxWidth:960, margin:"0 auto", padding:"20px 16px" }}>
+
+        {/* League toggle */}
+        <div style={{ display:"flex", gap:8, marginBottom:20 }}>
+          {[["doubles","👥 Doubles"],["singles","👤 Singles"]].map(([id,label]) => (
+            <button key={id} onClick={()=>setLg(id)} style={{ padding:"7px 18px", border:"none", borderRadius:7, cursor:"pointer", fontSize:13, fontWeight:600, background:lg===id?"#3b82f6":"#1e293b", color:lg===id?"#fff":"#64748b" }}>{label}</button>
+          ))}
+        </div>
+
+        {/* ── SCHEDULE ── */}
+        {tab==="schedule" && (
+          <div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+              <div style={{ fontWeight:700, color:"#fff" }}>Availability Grid</div>
+              <button style={pbtn} onClick={()=>{setModal("match");setMf({a:"",b:"",date:DATES[0],time:""});}}>+ Schedule Match</button>
+            </div>
+
+            {pending.length > 0 && (
+              <div style={{ marginBottom:20 }}>
+                <div style={{ fontSize:11, color:"#64748b", marginBottom:8, textTransform:"uppercase", letterSpacing:.5 }}>Upcoming Matches</div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))", gap:8 }}>
+                  {pending.map(m => (
+                    <div key={m.id} style={{ background:"#0a1e3a", border:"1px solid #1e3a6e", borderRadius:8, padding:"10px 12px" }}>
+                      <div style={{ fontWeight:700, color:"#93c5fd", fontSize:13 }}>{m.a}</div>
+                      <div style={{ fontSize:11, color:"#64748b" }}>vs {m.b}</div>
+                      <div style={{ color:"#64748b", fontSize:11, marginTop:5 }}>{m.date}{m.time?` · ${m.time}`:""}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ overflowX:"auto", border:"1px solid #1e293b", borderRadius:8 }}>
+              <table style={{ borderCollapse:"collapse", minWidth:700, width:"100%" }}>
+                <thead>
+                  <tr style={{ background:"#0a1020" }}>
+                    <th style={{ padding:"9px 12px", textAlign:"left", color:"#64748b", fontSize:11, fontWeight:600, textTransform:"uppercase", letterSpacing:.5, borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>{isD?"Team":"Player"}</th>
+                    {DATES.map((d,i) => (
+                      <th key={d} style={{ padding:"9px 4px", color:"#64748b", fontSize:11, fontWeight:600, borderBottom:"1px solid #1e293b", textAlign:"center", minWidth:64 }}>
+                        <div style={{ color:"#93c5fd" }}>{d}</div>
+                        <div>{DAYS[i]}</div>
+                      </th>
+                    ))}
+                    <th style={{ padding:"9px 4px", borderBottom:"1px solid #1e293b", width:36 }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teams.map((name, ri) => (
+                    <tr key={name} style={{ background:ri%2===0?"#111827":"#0f172a" }}>
+                      <td style={{ padding:"8px 12px", fontWeight:700, color:"#cbd5e1", fontSize:13, borderBottom:"1px solid #1e293b", whiteSpace:"nowrap" }}>{name}</td>
+                      {DATES.map(d => {
+                        const note = avail[name]?.[d];
+                        const booked = note && /w\//i.test(note);
+                        return (
+                          <td key={d} style={{ padding:"3px 3px", borderBottom:"1px solid #1e293b", verticalAlign:"top" }}>
+                            {note
+                              ? <div onClick={()=>removeAvail(name,d)} title="Click to remove" style={{ background:booked?"#064e3b":"#1e3a5f", border:`1px solid ${booked?"#10b98155":"#3b82f655"}`, borderRadius:5, padding:"3px 5px", color:booked?"#10b981":"#93c5fd", fontSize:10, cursor:"pointer", lineHeight:1.4 }}>{note}</div>
+                              : <div style={{ height:22 }} />
+                            }
+                          </td>
+                        );
+                      })}
+                      <td style={{ padding:"3px 4px", borderBottom:"1px solid #1e293b", textAlign:"center" }}>
+                        <button onClick={()=>{setModal("avail");setMf({name,date:DATES[0],note:""}); }} style={{ background:"none", border:"1px solid #334155", borderRadius:5, color:"#64748b", cursor:"pointer", padding:"2px 7px", fontSize:14, lineHeight:1.5 }}>+</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ marginTop:8, fontSize:11, color:"#64748b" }}>🟢 Green = match booked · 🔵 Blue = available · Click any cell to remove it</div>
+          </div>
+        )}
+
+        {/* ── SCORES ── */}
+        {tab==="scores" && (
+          <div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+              <div style={{ fontWeight:700, color:"#fff" }}>Match Results</div>
+              <button style={pbtn} onClick={()=>{setModal("match");setMf({a:"",b:"",date:DATES[0],time:""});}}>+ Add Match</button>
+            </div>
+            {matches.length===0 && <div style={{ textAlign:"center", color:"#64748b", padding:"60px 0" }}>No matches yet.</div>}
+            {pending.length > 0 && (
+              <div style={{ marginBottom:24 }}>
+                <div style={{ fontSize:11, color:"#64748b", textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>Pending Score Entry</div>
+                {pending.map(m => <MatchCard key={m.id} m={m} onScore={()=>{setModal("score");setMf({id:m.id,a:m.a,b:m.b,date:m.date,time:m.time,sa:"",sb:""});}} onDel={()=>delMatch(m.id)} />)}
+              </div>
+            )}
+            {complete.length > 0 && (
+              <div>
+                <div style={{ fontSize:11, color:"#64748b", textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>Completed</div>
+                {complete.map(m => <MatchCard key={m.id} m={m} done onScore={()=>{setModal("score");setMf({id:m.id,a:m.a,b:m.b,date:m.date,time:m.time,sa:m.sa,sb:m.sb});}} onDel={()=>delMatch(m.id)} />)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── LEADERBOARD ── */}
+        {tab==="leaderboard" && (
+          <div>
+            <div style={{ fontWeight:700, color:"#fff", marginBottom:20, fontSize:16 }}>{isD?"Doubles":"Singles"} Standings</div>
+            {stand.filter(s=>s.p>0).length===0
+              ? <div style={{ textAlign:"center", color:"#64748b", padding:"60px 0" }}>No completed matches yet — enter scores to see rankings.</div>
+              : (
+                <>
+                  <div style={{ display:"flex", justifyContent:"center", alignItems:"flex-end", gap:12, marginBottom:32 }}>
+                    {[1,0,2].map(idx => {
+                      const played = stand.filter(s=>s.p>0);
+                      const s = played[idx];
+                      if (!s) return <div key={idx} style={{ width:110 }} />;
+                      const H = [170,130,100];
+                      const C = ["#FFD700","#C0C0C0","#CD7F32"];
+                      const E = ["🥇","🥈","🥉"];
+                      const rank = idx===1?0:idx===0?1:2;
+                      return (
+                        <div key={s.n} style={{ textAlign:"center", width:120 }}>
+                          <div style={{ fontSize:26 }}>{E[idx]}</div>
+                          <div style={{ fontWeight:700, fontSize:12, color:"#e2e8f0", margin:"4px 0 2px" }}>{s.n}</div>
+                          <div style={{ fontSize:11, color:"#64748b", marginBottom:8 }}>{s.pts}pts · {s.w}W {s.l}L</div>
+                          <div style={{ height:H[rank], borderRadius:"6px 6px 0 0", background:`${C[idx]}18`, border:`2px solid ${C[idx]}55`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, fontWeight:900, color:C[idx] }}>{idx+1}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ border:"1px solid #1e293b", borderRadius:8, overflow:"hidden" }}>
+                    <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                      <thead>
+                        <tr style={{ background:"#0a1020" }}>
+                          {["#","Name","Played","Won","Lost","Points"].map((h,i) => (
+                            <th key={h} style={{ padding:"10px 12px", fontSize:11, color:"#64748b", fontWeight:600, textTransform:"uppercase", letterSpacing:.5, textAlign:i===1?"left":"center", borderBottom:"1px solid #1e293b" }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stand.map((s,i) => (
+                          <tr key={s.n} style={{ background:i%2===0?"#111827":"#0f172a" }}>
+                            <td style={{ padding:"11px 12px", textAlign:"center", fontSize:16, borderBottom:"1px solid #1e293b" }}>{["🥇","🥈","🥉"][i]||`${i+1}`}</td>
+                            <td style={{ padding:"11px 12px", fontWeight:700, color:"#cbd5e1", borderBottom:"1px solid #1e293b" }}>{s.n}</td>
+                            <td style={{ padding:"11px 12px", textAlign:"center", color:"#64748b", borderBottom:"1px solid #1e293b" }}>{s.p}</td>
+                            <td style={{ padding:"11px 12px", textAlign:"center", color:"#10b981", fontWeight:700, borderBottom:"1px solid #1e293b" }}>{s.w}</td>
+                            <td style={{ padding:"11px 12px", textAlign:"center", color:"#ef4444", borderBottom:"1px solid #1e293b" }}>{s.l}</td>
+                            <td style={{ padding:"11px 12px", textAlign:"center", color:"#3b82f6", fontWeight:800, fontSize:15, borderBottom:"1px solid #1e293b" }}>{s.pts}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )
+            }
+          </div>
+        )}
+      </div>
+
+      {/* ── MODALS ── */}
+      {modal==="match" && (
+        <Modal title={`Schedule ${isD?"Doubles":"Singles"} Match`} onClose={()=>setModal(null)}>
+          <label style={lbl}>{isD?"Team 1":"Player 1"}</label>
+          <select style={inp} value={mf.a||""} onChange={e=>setMf(f=>({...f,a:e.target.value}))}>
+            <option value="">Select…</option>
+            {teams.map(t=><option key={t} value={t}>{t}</option>)}
+          </select>
+          <label style={lbl}>{isD?"Team 2":"Player 2"}</label>
+          <select style={inp} value={mf.b||""} onChange={e=>setMf(f=>({...f,b:e.target.value}))}>
+            <option value="">Select…</option>
+            {teams.filter(t=>t!==mf.a).map(t=><option key={t} value={t}>{t}</option>)}
+          </select>
+          <label style={lbl}>Date</label>
+          <select style={inp} value={mf.date||DATES[0]} onChange={e=>setMf(f=>({...f,date:e.target.value}))}>
+            {DATES.map((d,i)=><option key={d} value={d}>{d} ({DAYS[i]})</option>)}
+          </select>
+          <label style={lbl}>Time</label>
+          <input style={inp} placeholder="e.g. 5:30pm" value={mf.time||""} onChange={e=>setMf(f=>({...f,time:e.target.value}))} />
+          <div style={{ display:"flex", gap:8, marginTop:18 }}>
+            <button style={pbtn} disabled={!mf.a||!mf.b} onClick={addMatch}>Schedule</button>
+            <button style={sbtn} onClick={()=>setModal(null)}>Cancel</button>
+          </div>
+        </Modal>
+      )}
+
+      {modal==="score" && (
+        <Modal title="Enter Score" onClose={()=>setModal(null)}>
+          <div style={{ background:"#0f172a", borderRadius:8, padding:12, textAlign:"center", marginBottom:4 }}>
+            <div style={{ fontWeight:700, color:"#fff", fontSize:15 }}>{mf.a} <span style={{ color:"#64748b", fontWeight:400 }}>vs</span> {mf.b}</div>
+            <div style={{ fontSize:11, color:"#64748b", marginTop:3 }}>{mf.date}{mf.time?` · ${mf.time}`:""}</div>
+          </div>
+          <div style={{ fontSize:11, color:"#64748b", textAlign:"center", margin:"8px 0 2px" }}>Sets separated by spaces — e.g. <code style={{ background:"#334155", padding:"1px 4px", borderRadius:3 }}>6-4 3-6 7-5</code></div>
+          <label style={lbl}>{mf.a}</label>
+          <input style={inp} placeholder="6-4 6-2" value={mf.sa||""} onChange={e=>setMf(f=>({...f,sa:e.target.value}))} />
+          <label style={lbl}>{mf.b}</label>
+          <input style={inp} placeholder="4-6 2-6" value={mf.sb||""} onChange={e=>setMf(f=>({...f,sb:e.target.value}))} />
+          <div style={{ display:"flex", gap:8, marginTop:18 }}>
+            <button style={pbtn} disabled={!mf.sa||!mf.sb} onClick={saveScore}>Save Score</button>
+            <button style={sbtn} onClick={()=>setModal(null)}>Cancel</button>
+          </div>
+        </Modal>
+      )}
+
+      {modal==="avail" && (
+        <Modal title={`Add Availability — ${mf.name}`} onClose={()=>setModal(null)}>
+          <label style={lbl}>Date</label>
+          <select style={inp} value={mf.date||DATES[0]} onChange={e=>setMf(f=>({...f,date:e.target.value}))}>
+            {DATES.map((d,i)=><option key={d} value={d}>{d} ({DAYS[i]})</option>)}
+          </select>
+          <label style={lbl}>Note</label>
+          <input style={inp} placeholder="e.g. 6pm available" value={mf.note||""} onChange={e=>setMf(f=>({...f,note:e.target.value}))} />
+          <div style={{ display:"flex", gap:8, marginTop:18 }}>
+            <button style={pbtn} disabled={!mf.note} onClick={addAvail}>Add</button>
+            <button style={sbtn} onClick={()=>setModal(null)}>Cancel</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
