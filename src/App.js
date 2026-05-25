@@ -72,12 +72,17 @@ async function dbLoad() {
 
 async function dbSave(data) {
   try {
-    await fetch(FB_URL, {
+    console.log("💾 Saving to Firebase...", JSON.stringify(data).slice(0,100));
+    const r = await fetch(FB_URL, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-  } catch {}
+    const result = await r.json();
+    console.log("✅ Firebase save result:", r.status, JSON.stringify(result).slice(0,100));
+  } catch(e) {
+    console.error("❌ Firebase save error:", e);
+  }
 }
 
 function calcWins(score) {
