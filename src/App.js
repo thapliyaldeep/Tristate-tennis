@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 const FB_URL = "https://tristate-tennis-default-rtdb.firebaseio.com/data.json";
 
@@ -163,7 +163,6 @@ export default function App(){
   const [lg,setLg]         = useState("doubles");
   const [modal,setModal]   = useState(null);
   const [mf,setMf]         = useState({});
-  const saveTimer          = useRef(null);
 
   const FUTURE      = futureDates();
   const defaultDate = FUTURE[0]||ALL_DATES[0];
@@ -179,9 +178,15 @@ export default function App(){
   },[]);
 
   async function upd(fn){
-    const nd=fn(data); setData(nd); setStatus("saving");
-    clearTimeout(saveTimer.current);
-    saveTimer.current=setTimeout(async()=>{ await dbSave(nd); setStatus("ok"); },600);
+    const nd=fn(data);
+    setData(nd);
+    setStatus("saving");
+    try {
+      await dbSave(nd);
+      setStatus("ok");
+    } catch {
+      setStatus("error");
+    }
   }
 
   if(status==="loading") return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#64748b",fontSize:15}}>🎾 Loading league data…</div>;
@@ -195,8 +200,8 @@ export default function App(){
   const pending = matches.filter(m=>!m.done);
   const complete= matches.filter(m=>m.done);
 
-  function addMatch(){
-    upd(d=>{
+  async function addMatch(){
+    await upd(d=>{
       const m={id:isD?`d${d.did}`:`s${d.sid}`,a:mf.a,b:mf.b,date:mf.date||defaultDate,time:mf.time||"",sa:"",sb:"",done:false};
       return isD?{...d,dMatches:[...d.dMatches,m],did:d.did+1}:{...d,sMatches:[...d.sMatches,m],sid:d.sid+1};
     }); setModal(null);
@@ -204,24 +209,24 @@ export default function App(){
   function delMatch(id){
     upd(d=>isD?{...d,dMatches:d.dMatches.filter(m=>m.id!==id)}:{...d,sMatches:d.sMatches.filter(m=>m.id!==id)});
   }
-  function saveScore(){
-    upd(d=>{
+  async function saveScore(){
+    await upd(d=>{
       const stamp=Date.now();
       return isD
         ?{...d,dMatches:d.dMatches.map(m=>m.id===mf.id?{...m,sa:mf.sa,sb:mf.sb,done:true,completedAt:m.completedAt||stamp}:m)}
         :{...d,sMatches:d.sMatches.map(m=>m.id===mf.id?{...m,sa:mf.sa,sb:mf.sb,done:true,completedAt:m.completedAt||stamp}:m)};
     }); setModal(null);
   }
-  function addAvail(){
-    upd(d=>{const k=isD?"dAvail":"sAvail";return{...d,[k]:{...d[k],[mf.name]:{...(d[k][mf.name]||{}),[mf.date]:mf.note}}};});
+  async function addAvail(){
+    await upd(d=>{const k=isD?"dAvail":"sAvail";return{...d,[k]:{...d[k],[mf.name]:{...(d[k][mf.name]||{}),[mf.date]:mf.note}}};});
     setModal(null);
   }
   function removeAvail(name,date){
     upd(d=>{const k=isD?"dAvail":"sAvail";const row={...(d[k][name]||{})};delete row[date];return{...d,[k]:{...d[k],[name]:row}};});
   }
-  function addTeam(){
+  async function addTeam(){
     const name=mf.teamName?.trim(); if(!name) return;
-    upd(d=>isD?{...d,doubles:[...d.doubles,name]}:{...d,singles:[...d.singles,name]});
+    await upd(d=>isD?{...d,doubles:[...d.doubles,name]}:{...d,singles:[...d.singles,name]});
     setModal(null);
   }
   function removeTeam(name){
