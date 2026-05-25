@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 
-const BIN_ID  = "6a0bd37eee5a733b12e0efcb";
-const API_KEY = "$2a$10$Uv2k9R4NLWgKfOeNNFGWLOON/Sg3JuUej7kt9stjDrpCp4y8/TT5e";
-const BIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+const FB_URL = "https://tristate-tennis-default-rtdb.firebaseio.com/data.json";
 
 function genDates() {
   const dates = [], days = [], names = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -33,7 +31,8 @@ const DEFAULT_DB = {
     {id:"d2",a:"Bobby/Satendra",b:"Akash/Micky",date:"5/18",time:"6pm",sa:"",sb:"",done:false},
   ],
   sMatches: [],
-  did: 3, sid: 1,
+  did: 3,
+  sid: 1,
 };
 
 function futureDates() {
@@ -52,17 +51,19 @@ function isEditable(m) {
 
 async function dbLoad() {
   try {
-    const r = await fetch(BIN_URL+"/latest", { headers:{"X-Master-Key":API_KEY,"X-Bin-Meta":"false"} });
+    const r = await fetch(FB_URL);
     const data = await r.json();
-    // Migrate old data that doesn't have doubles/singles arrays
-    if (!data.doubles) data.doubles = DEFAULT_DB.doubles;
-    if (!data.singles) data.singles = DEFAULT_DB.singles;
-    return data;
+    return data || null;
   } catch { return null; }
 }
+
 async function dbSave(data) {
   try {
-    await fetch(BIN_URL, { method:"PUT", headers:{"Content-Type":"application/json","X-Master-Key":API_KEY}, body:JSON.stringify(data) });
+    await fetch(FB_URL, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
   } catch {}
 }
 
@@ -75,6 +76,7 @@ function calcWins(score) {
   }
   return {w,l};
 }
+
 function calcStandings(matches, players) {
   const st={};
   players.forEach(p=>{st[p]={p:0,w:0,l:0,pts:0};});
@@ -90,10 +92,10 @@ function calcStandings(matches, players) {
   return Object.entries(st).map(([n,v])=>({n,...v})).sort((a,b)=>b.pts-a.pts||b.w-a.w);
 }
 
-const inp  = {width:"100%",padding:"9px 11px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"};
-const pbtn = {padding:"8px 16px",background:"#3b82f6",border:"none",borderRadius:7,color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"};
-const sbtn = {padding:"8px 16px",background:"#1e293b",border:"none",borderRadius:7,color:"#64748b",fontSize:13,cursor:"pointer"};
-const lbl  = {display:"block",fontSize:11,color:"#64748b",marginBottom:5,marginTop:12,textTransform:"uppercase",letterSpacing:.5};
+const inp    = {width:"100%",padding:"9px 11px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"};
+const pbtn   = {padding:"8px 16px",background:"#3b82f6",border:"none",borderRadius:7,color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"};
+const sbtn   = {padding:"8px 16px",background:"#1e293b",border:"none",borderRadius:7,color:"#64748b",fontSize:13,cursor:"pointer"};
+const lbl    = {display:"block",fontSize:11,color:"#64748b",marginBottom:5,marginTop:12,textTransform:"uppercase",letterSpacing:.5};
 const redbtn = {padding:"5px 10px",background:"#2d1515",border:"none",borderRadius:6,color:"#f87171",fontSize:12,cursor:"pointer"};
 
 function Modal({title,onClose,children}){
@@ -150,11 +152,17 @@ export default function App(){
   const [mf,setMf]         = useState({});
   const saveTimer          = useRef(null);
 
-  const FUTURE = futureDates();
+  const FUTURE      = futureDates();
   const defaultDate = FUTURE[0]||ALL_DATES[0];
 
   useEffect(()=>{
-    dbLoad().then(r=>{ if(r){setData(r);setStatus("ok");}else setStatus("error"); });
+    dbLoad().then(r=>{
+      if(r){ setData(r); setStatus("ok"); }
+      else {
+        // First time — seed with defaults
+        dbSave(DEFAULT_DB).then(()=>{ setData(DEFAULT_DB); setStatus("ok"); });
+      }
+    }).catch(()=>setStatus("error"));
   },[]);
 
   async function upd(fn){
@@ -174,7 +182,6 @@ export default function App(){
   const pending = matches.filter(m=>!m.done);
   const complete= matches.filter(m=>m.done);
 
-  // ── handlers ──
   function addMatch(){
     upd(d=>{
       const m={id:isD?`d${d.did}`:`s${d.sid}`,a:mf.a,b:mf.b,date:mf.date||defaultDate,time:mf.time||"",sa:"",sb:"",done:false};
@@ -199,27 +206,18 @@ export default function App(){
   function removeAvail(name,date){
     upd(d=>{const k=isD?"dAvail":"sAvail";const row={...(d[k][name]||{})};delete row[date];return{...d,[k]:{...d[k],[name]:row}};});
   }
-
-  // ── team/player management ──
   function addTeam(){
     const name=mf.teamName?.trim(); if(!name) return;
-    upd(d=>isD
-      ?{...d,doubles:[...d.doubles,name]}
-      :{...d,singles:[...d.singles,name]}
-    ); setModal(null);
+    upd(d=>isD?{...d,doubles:[...d.doubles,name]}:{...d,singles:[...d.singles,name]});
+    setModal(null);
   }
   function removeTeam(name){
-    if(!window.confirm(`Remove "${name}"? This won't delete their matches.`)) return;
-    upd(d=>isD
-      ?{...d,doubles:d.doubles.filter(t=>t!==name)}
-      :{...d,singles:d.singles.filter(t=>t!==name)}
-    );
+    if(!window.confirm(`Remove "${name}"? Their matches will be kept.`)) return;
+    upd(d=>isD?{...d,doubles:d.doubles.filter(t=>t!==name)}:{...d,singles:d.singles.filter(t=>t!==name)});
   }
 
   const statusColor={ok:"#10b981",saving:"#f59e0b",error:"#ef4444"}[status]||"#64748b";
   const statusText ={ok:"✓ Saved",saving:"💾 Saving…",error:"⚠ Save failed"}[status];
-
-  const NAV_TABS=[["schedule","📅 Schedule"],["scores","🎯 Scores"],["leaderboard","🏆 Standings"],["manage","⚙️ Manage"]];
 
   return(
     <div style={{minHeight:"100vh",background:"#0f172a",color:"#e2e8f0",fontFamily:"system-ui,sans-serif"}}>
@@ -239,7 +237,7 @@ export default function App(){
             <span style={{fontSize:11,color:statusColor}}>{statusText}</span>
           </div>
           <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
-            {NAV_TABS.map(([id,label])=>(
+            {[["schedule","📅 Schedule"],["scores","🎯 Scores"],["leaderboard","🏆 Standings"],["manage","⚙️ Manage"]].map(([id,label])=>(
               <button key={id} onClick={()=>setTab(id)} style={{padding:"8px 16px",border:"none",cursor:"pointer",borderRadius:"6px 6px 0 0",background:tab===id?"#1e293b":"transparent",color:tab===id?"#fff":"#64748b",fontWeight:tab===id?700:400,fontSize:13}}>{label}</button>
             ))}
           </div>
@@ -248,8 +246,7 @@ export default function App(){
 
       <div style={{maxWidth:960,margin:"0 auto",padding:"20px 16px"}}>
 
-        {/* League toggle — hidden on manage tab */}
-        {tab!=="manage" && (
+        {tab!=="manage"&&(
           <div style={{display:"flex",gap:8,marginBottom:20}}>
             {[["doubles","👥 Doubles"],["singles","👤 Singles"]].map(([id,label])=>(
               <button key={id} onClick={()=>setLg(id)} style={{padding:"7px 18px",border:"none",borderRadius:7,cursor:"pointer",fontSize:13,fontWeight:600,background:lg===id?"#3b82f6":"#1e293b",color:lg===id?"#fff":"#64748b"}}>{label}</button>
@@ -407,8 +404,6 @@ export default function App(){
         {tab==="manage"&&(
           <div>
             <div style={{fontWeight:700,color:"#fff",fontSize:16,marginBottom:20}}>Manage Teams & Players</div>
-
-            {/* Doubles section */}
             <div style={{marginBottom:32}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                 <div style={{fontWeight:700,color:"#93c5fd",fontSize:14}}>👥 Doubles Teams ({data.doubles.length})</div>
@@ -423,8 +418,6 @@ export default function App(){
                 ))}
               </div>
             </div>
-
-            {/* Singles section */}
             <div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                 <div style={{fontWeight:700,color:"#93c5fd",fontSize:14}}>👤 Singles Players ({data.singles.length})</div>
@@ -493,7 +486,7 @@ export default function App(){
           {FUTURE.length===0
             ?<div style={{color:"#64748b",fontSize:13,marginTop:8}}>No future dates available.</div>
             :<select style={inp} value={mf.date||defaultDate} onChange={e=>setMf(f=>({...f,date:e.target.value}))}>
-               {FUTURE.map(d=>{ const gi=ALL_DATES.indexOf(d); return <option key={d} value={d}>{d} ({ALL_DAYS[gi]})</option>; })}
+               {FUTURE.map(d=>{const gi=ALL_DATES.indexOf(d);return <option key={d} value={d}>{d} ({ALL_DAYS[gi]})</option>;})}
              </select>
           }
           <label style={lbl}>Note</label>
@@ -513,7 +506,7 @@ export default function App(){
             placeholder={isD?"Player1/Player2":"e.g. Rahul"}
             value={mf.teamName||""}
             onChange={e=>setMf(f=>({...f,teamName:e.target.value}))}
-            onKeyDown={e=>{ if(e.key==="Enter"&&mf.teamName?.trim()) addTeam(); }}
+            onKeyDown={e=>{if(e.key==="Enter"&&mf.teamName?.trim()) addTeam();}}
             autoFocus
           />
           {isD&&<div style={{fontSize:11,color:"#64748b",marginTop:6}}>Use "Name1/Name2" format to match the other teams</div>}
