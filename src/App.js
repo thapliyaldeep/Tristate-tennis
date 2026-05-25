@@ -49,11 +49,24 @@ function isEditable(m) {
   return Date.now() - m.completedAt < 24*60*60*1000;
 }
 
+// Firebase stores arrays as {0:...,1:...} objects — convert back to real arrays
+function fixArrays(data) {
+  if (!data) return data;
+  const toArr = (v) => v == null ? [] : Array.isArray(v) ? v : Object.values(v);
+  return {
+    ...data,
+    doubles:  toArr(data.doubles),
+    singles:  toArr(data.singles),
+    dMatches: toArr(data.dMatches),
+    sMatches: toArr(data.sMatches),
+  };
+}
+
 async function dbLoad() {
   try {
     const r = await fetch(FB_URL);
     const data = await r.json();
-    return data || null;
+    return data ? fixArrays(data) : null;
   } catch { return null; }
 }
 
