@@ -2,6 +2,63 @@ import { useState, useEffect } from "react";
 
 const FB_URL = "https://tristate-tennis-default-rtdb.firebaseio.com/data.json";
 
+// Firebase cannot handle / in keys. Store everything as strings.
+function encodeForSave(data) {
+  return {
+    doubles:  data.doubles.join("|"),
+    singles:  data.singles.join("|"),
+    dAvail:   JSON.stringify(data.dAvail  || {}),
+    sAvail:   JSON.stringify(data.sAvail  || {}),
+    dMatches: JSON.stringify(data.dMatches|| []),
+    sMatches: JSON.stringify(data.sMatches|| []),
+    did: data.did,
+    sid: data.sid,
+  };
+}
+
+function decodeAfterLoad(raw) {
+  return {
+    doubles:  raw.doubles  ? raw.doubles.split("|")  : [],
+    singles:  raw.singles  ? raw.singles.split("|")  : [],
+    dAvail:   raw.dAvail   ? JSON.parse(raw.dAvail)  : {},
+    sAvail:   raw.sAvail   ? JSON.parse(raw.sAvail)  : {},
+    dMatches: raw.dMatches ? JSON.parse(raw.dMatches): [],
+    sMatches: raw.sMatches ? JSON.parse(raw.sMatches): [],
+    did: raw.did || 3,
+    sid: raw.sid || 1,
+  };
+}
+
+async function dbLoad() {
+  try {
+    const r = await fetch(FB_URL);
+    const raw = await r.json();
+    return raw ? decodeAfterLoad(raw) : null;
+  } catch { return null; }
+}
+
+async function dbSave(data) {
+  try {
+    await fetch(FB_URL, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(encodeForSave(data)),
+    });
+  } catch(e) { console.error("Firebase save error:", e); }
+}
+function decodeAvail(avail) {
+  if (!avail) return {};
+  const out = {};
+  Object.entries(avail).forEach(([k, v]) => { out[fromKey(k)] = v; });
+  return out;
+}
+function encodeForSave(data) {
+  return { ...data, dAvail: encodeAvail(data.dAvail), sAvail: encodeAvail(data.sAvail) };
+}
+function decodeAfterLoad(data) {
+  return { ...data, dAvail: decodeAvail(data.dAvail), sAvail: decodeAvail(data.sAvail) };
+}
+
 function genDates() {
   const dates = [], days = [], names = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const start = new Date(2026, 4, 1), end = new Date(2026, 6, 5);
@@ -66,20 +123,17 @@ async function dbLoad() {
   try {
     const r = await fetch(FB_URL);
     const data = await r.json();
-    return data ? fixArrays(data) : null;
+    return data ? decodeAfterLoad(fixArrays(data)) : null;
   } catch { return null; }
 }
 
 async function dbSave(data) {
   try {
-    console.log("💾 Saving to Firebase...", JSON.stringify(data).slice(0,100));
     const r = await fetch(FB_URL, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      body: JSON.stringify(encodeForSave(data)),
     });
-    const result = await r.json();
-    console.log("✅ Firebase save result:", r.status, JSON.stringify(result).slice(0,100));
   } catch(e) {
     console.error("❌ Firebase save error:", e);
   }
