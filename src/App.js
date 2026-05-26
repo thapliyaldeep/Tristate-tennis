@@ -371,18 +371,42 @@ export default function App() {
               <div style={{fontWeight:700,color:"#fff"}}>Availability Grid</div>
               <button style={pbtn} onClick={()=>{setModal("match");setMf({a:"",b:"",date:defaultDate,time:""});}}>+ Schedule Match</button>
             </div>
-            {pending.length>0&&(
+            {matches.length>0&&(
               <div style={{marginBottom:20}}>
-                <div style={{fontSize:11,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>Upcoming Matches</div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))",gap:8}}>
-                  {pending.map(m=>(
-                    <div key={m.id} style={{background:"#0a1e3a",border:"1px solid #1e3a6e",borderRadius:8,padding:"10px 12px"}}>
-                      <div style={{fontWeight:700,color:"#93c5fd",fontSize:13}}>{m.a}</div>
-                      <div style={{fontSize:11,color:"#64748b"}}>vs {m.b}</div>
-                      <div style={{color:"#64748b",fontSize:11,marginTop:5}}>{m.date}{m.time?` · ${m.time}`:""}</div>
+                {pending.length>0&&(
+                  <>
+                    <div style={{fontSize:11,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>Upcoming Matches</div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))",gap:8,marginBottom:16}}>
+                      {pending.map(m=>(
+                        <div key={m.id} style={{background:"#0a1e3a",border:"1px solid #1e3a6e",borderRadius:8,padding:"10px 12px"}}>
+                          <div style={{fontWeight:700,color:"#93c5fd",fontSize:13}}>{m.a}</div>
+                          <div style={{fontSize:11,color:"#64748b"}}>vs {m.b}</div>
+                          <div style={{color:"#64748b",fontSize:11,marginTop:5}}>{m.date}{m.time?` · ${m.time}`:""}</div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </>
+                )}
+                {complete.length>0&&(
+                  <>
+                    <div style={{fontSize:11,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>Completed Matches</div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))",gap:8}}>
+                      {complete.map(m=>{
+                        const wa=calcWins(m.sa),wb=calcWins(m.sb);
+                        const winner=wa&&wb?(wa.w>wb.w?m.a:m.b):null;
+                        return(
+                          <div key={m.id} style={{background:"#061a0e",border:"1px solid #14532d",borderRadius:8,padding:"10px 12px"}}>
+                            <div style={{fontWeight:700,color:winner===m.a?"#34d399":"#cbd5e1",fontSize:13}}>{m.a} {winner===m.a&&"🏆"}</div>
+                            <div style={{fontSize:11,color:"#64748b"}}>vs</div>
+                            <div style={{fontWeight:700,color:winner===m.b?"#34d399":"#cbd5e1",fontSize:13}}>{m.b} {winner===m.b&&"🏆"}</div>
+                            <div style={{color:"#10b981",fontSize:11,marginTop:5,fontWeight:600}}>{m.sa} / {m.sb}</div>
+                            <div style={{color:"#64748b",fontSize:10,marginTop:3}}>{m.date}{m.time?` · ${m.time}`:""}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
             )}
             <div style={{overflowX:"auto",border:"1px solid #1e293b",borderRadius:8}}>
