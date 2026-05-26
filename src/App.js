@@ -152,7 +152,6 @@ function MatchCard({m,onScore,onDel}) {
 
 // ─── Group Table Component ────────────────────────────────────────────────────
 function GroupTable({label,standings}) {
-  const top2 = standings.slice(0,2).map(s=>s.n);
   return (
     <div style={{marginBottom:24}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
@@ -208,7 +207,6 @@ function KnockoutBracket({standA, standB}) {
     fontWeight:700, fontSize:13, minWidth:140, textAlign:"center",
   });
   const vsStyle = {color:"#475569",fontSize:11,fontWeight:700,textAlign:"center",margin:"4px 0"};
-  const lineStyle = {width:2,background:"#334155",alignSelf:"stretch",margin:"0 auto"};
 
   return (
     <div style={{marginTop:8}}>
