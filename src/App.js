@@ -1,39 +1,14 @@
 import { useState, useEffect } from "react";
 
-const FB_URL = "https://tristate-tennis-default-rtdb.firebaseio.com/data.json";
-
-// Firebase cannot handle / in keys. Store everything as strings.
-function encodeForSave(data) {
-  return {
-    doubles:  data.doubles.join("|"),
-    singles:  data.singles.join("|"),
-    dAvail:   JSON.stringify(data.dAvail  || {}),
-    sAvail:   JSON.stringify(data.sAvail  || {}),
-    dMatches: JSON.stringify(data.dMatches|| []),
-    sMatches: JSON.stringify(data.sMatches|| []),
-    did: data.did,
-    sid: data.sid,
-  };
-}
-
-function decodeAfterLoad(raw) {
-  return {
-    doubles:  raw.doubles  ? raw.doubles.split("|")  : [],
-    singles:  raw.singles  ? raw.singles.split("|")  : [],
-    dAvail:   raw.dAvail   ? JSON.parse(raw.dAvail)  : {},
-    sAvail:   raw.sAvail   ? JSON.parse(raw.sAvail)  : {},
-    dMatches: raw.dMatches ? JSON.parse(raw.dMatches): [],
-    sMatches: raw.sMatches ? JSON.parse(raw.sMatches): [],
-    did: raw.did || 3,
-    sid: raw.sid || 1,
-  };
-}
+// ─── Firebase ────────────────────────────────────────────────────────────────
+// Store the ENTIRE state as one JSON string — avoids ALL Firebase key restrictions
+const FB_URL = "https://tristate-tennis-default-rtdb.firebaseio.com/state.json";
 
 async function dbLoad() {
   try {
     const r = await fetch(FB_URL);
-    const raw = await r.json();
-    return raw ? decodeAfterLoad(raw) : null;
+    const val = await r.json();
+    return val ? JSON.parse(val) : null;
   } catch { return null; }
 }
 
@@ -42,103 +17,54 @@ async function dbSave(data) {
     await fetch(FB_URL, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(encodeForSave(data)),
+      body: JSON.stringify(JSON.stringify(data)),
     });
-  } catch(e) { console.error("Firebase save error:", e); }
-}
-function decodeAvail(avail) {
-  if (!avail) return {};
-  const out = {};
-  Object.entries(avail).forEach(([k, v]) => { out[fromKey(k)] = v; });
-  return out;
-}
-function encodeForSave(data) {
-  return { ...data, dAvail: encodeAvail(data.dAvail), sAvail: encodeAvail(data.sAvail) };
-}
-function decodeAfterLoad(data) {
-  return { ...data, dAvail: decodeAvail(data.dAvail), sAvail: decodeAvail(data.sAvail) };
+  } catch(e) { console.error("Save error", e); }
 }
 
+// ─── Dates ───────────────────────────────────────────────────────────────────
 function genDates() {
-  const dates = [], days = [], names = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-  const start = new Date(2026, 4, 1), end = new Date(2026, 6, 5);
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate()+1)) {
+  const dates=[], days=[], names=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const start=new Date(2026,4,1), end=new Date(2026,6,5);
+  for (let d=new Date(start); d<=end; d.setDate(d.getDate()+1)) {
     dates.push(`${d.getMonth()+1}/${d.getDate()}`);
     days.push(names[d.getDay()]);
   }
-  return { dates, days };
+  return {dates,days};
 }
-const { dates: ALL_DATES, days: ALL_DAYS } = genDates();
-
-const DEFAULT_DB = {
-  doubles: ["Nitin/Ashish","Jai/Deep","Tarun/Sumit","Bobby/Satendra","Akash/Micky","Dhar/Vineet","Sanjay/Ravi"],
-  singles: ["Ashish","Deep","Sumit","Bobby","Akash","Dharam","Sanjay","Pratush","Viraj","Tushar"],
-  dAvail: {
-    "Nitin/Ashish":   {"5/17":"4pm w/ Jai/Deep","5/18":"6pm avail","5/22":"5:30pm avail"},
-    "Jai/Deep":       {"5/17":"4pm w/ Nitin/Ashish"},
-    "Tarun/Sumit":    {"5/20":"5pm avail","5/21":"5pm avail"},
-    "Bobby/Satendra": {"5/18":"6pm w/ Akash/Micky"},
-    "Akash/Micky":    {"5/18":"6pm w/ Bobby/Satu"},
-    "Dhar/Vineet":    {"5/19":"6pm onwards"},
-    "Sanjay/Ravi":    {"5/16":"5pm avail","5/17":"Anytime","5/20":"6pm avail","5/21":"6pm avail"},
-  },
-  sAvail: { "Dharam":{"5/15":"5pm+","5/16":"8-10am"}, "Viraj":{"5/15":"5pm+"} },
-  dMatches: [
-    {id:"d1",a:"Nitin/Ashish",b:"Jai/Deep",date:"5/17",time:"4pm",sa:"",sb:"",done:false},
-    {id:"d2",a:"Bobby/Satendra",b:"Akash/Micky",date:"5/18",time:"6pm",sa:"",sb:"",done:false},
-  ],
-  sMatches: [],
-  did: 3,
-  sid: 1,
-};
+const {dates:ALL_DATES,days:ALL_DAYS} = genDates();
 
 function futureDates() {
-  const today = new Date(); today.setHours(0,0,0,0);
-  return ALL_DATES.filter(d => {
-    const [m,day] = d.split("/").map(Number);
-    return new Date(2026,m-1,day) >= today;
+  const today=new Date(); today.setHours(0,0,0,0);
+  return ALL_DATES.filter(d=>{
+    const [m,dy]=d.split("/").map(Number);
+    return new Date(2026,m-1,dy)>=today;
   });
 }
 
-function isEditable(m) {
-  if (!m.done) return true;
-  if (!m.completedAt) return false;
-  return Date.now() - m.completedAt < 24*60*60*1000;
-}
+// ─── Default data ─────────────────────────────────────────────────────────────
+const DEFAULT = {
+  doubles:  ["Nitin/Ashish","Jai/Deep","Tarun/Sumit","Bobby/Satendra","Akash/Micky","Dhar/Vineet","Sanjay/Ravi"],
+  singles:  ["Ashish","Deep","Sumit","Bobby","Akash","Dharam","Sanjay","Pratush","Viraj","Tushar"],
+  dAvail:   {
+    "Nitin/Ashish":  {"5/17":"4pm w Jai-Deep","5/18":"6pm avail","5/22":"5:30pm avail"},
+    "Jai/Deep":      {"5/17":"4pm w Nitin-Ashish"},
+    "Tarun/Sumit":   {"5/20":"5pm avail","5/21":"5pm avail"},
+    "Bobby/Satendra":{"5/18":"6pm w Akash-Micky"},
+    "Akash/Micky":   {"5/18":"6pm w Bobby-Satu"},
+    "Dhar/Vineet":   {"5/19":"6pm onwards"},
+    "Sanjay/Ravi":   {"5/16":"5pm avail","5/17":"Anytime","5/20":"6pm avail","5/21":"6pm avail"},
+  },
+  sAvail:   {"Dharam":{"5/15":"5pm+","5/16":"8-10am"},"Viraj":{"5/15":"5pm+"}},
+  dMatches: [
+    {id:"d1",a:"Nitin/Ashish",  b:"Jai/Deep",     date:"5/17",time:"4pm",sa:"",sb:"",done:false},
+    {id:"d2",a:"Bobby/Satendra",b:"Akash/Micky",  date:"5/18",time:"6pm",sa:"",sb:"",done:false},
+  ],
+  sMatches: [],
+  did:3, sid:1,
+};
 
-// Firebase stores arrays as {0:...,1:...} objects — convert back to real arrays
-function fixArrays(data) {
-  if (!data) return data;
-  const toArr = (v) => v == null ? [] : Array.isArray(v) ? v : Object.values(v);
-  return {
-    ...data,
-    doubles:  toArr(data.doubles),
-    singles:  toArr(data.singles),
-    dMatches: toArr(data.dMatches),
-    sMatches: toArr(data.sMatches),
-  };
-}
-
-async function dbLoad() {
-  try {
-    const r = await fetch(FB_URL);
-    const data = await r.json();
-    return data ? decodeAfterLoad(fixArrays(data)) : null;
-  } catch { return null; }
-}
-
-async function dbSave(data) {
-  try {
-    const r = await fetch(FB_URL, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(encodeForSave(data)),
-    });
-  } catch(e) {
-    console.error("❌ Firebase save error:", e);
-  }
-}
-
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function calcWins(score) {
   if (!score) return null;
   let w=0,l=0;
@@ -149,29 +75,36 @@ function calcWins(score) {
   return {w,l};
 }
 
-function calcStandings(matches, players) {
+function calcStandings(matches,players) {
   const st={};
   players.forEach(p=>{st[p]={p:0,w:0,l:0,pts:0};});
-  for(const m of matches){
-    if(!m.done) continue;
+  for (const m of matches) {
+    if (!m.done) continue;
     const wa=calcWins(m.sa),wb=calcWins(m.sb); if(!wa||!wb) continue;
-    if(!st[m.a]) st[m.a]={p:0,w:0,l:0,pts:0};
-    if(!st[m.b]) st[m.b]={p:0,w:0,l:0,pts:0};
-    st[m.a].p++;st[m.b].p++;
-    if(wa.w>wb.w){st[m.a].w++;st[m.a].pts+=3;st[m.b].l++;}
-    else{st[m.b].w++;st[m.b].pts+=3;st[m.a].l++;}
+    if (!st[m.a]) st[m.a]={p:0,w:0,l:0,pts:0};
+    if (!st[m.b]) st[m.b]={p:0,w:0,l:0,pts:0};
+    st[m.a].p++; st[m.b].p++;
+    if (wa.w>wb.w){st[m.a].w++;st[m.a].pts+=3;st[m.b].l++;}
+    else          {st[m.b].w++;st[m.b].pts+=3;st[m.a].l++;}
   }
   return Object.entries(st).map(([n,v])=>({n,...v})).sort((a,b)=>b.pts-a.pts||b.w-a.w);
 }
 
+function isEditable(m) {
+  if (!m.done) return true;
+  if (!m.completedAt) return false;
+  return Date.now()-m.completedAt < 24*60*60*1000;
+}
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
 const inp    = {width:"100%",padding:"9px 11px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"};
 const pbtn   = {padding:"8px 16px",background:"#3b82f6",border:"none",borderRadius:7,color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"};
 const sbtn   = {padding:"8px 16px",background:"#1e293b",border:"none",borderRadius:7,color:"#64748b",fontSize:13,cursor:"pointer"};
 const lbl    = {display:"block",fontSize:11,color:"#64748b",marginBottom:5,marginTop:12,textTransform:"uppercase",letterSpacing:.5};
 const redbtn = {padding:"5px 10px",background:"#2d1515",border:"none",borderRadius:6,color:"#f87171",fontSize:12,cursor:"pointer"};
 
-function Modal({title,onClose,children}){
-  return(
+function Modal({title,onClose,children}) {
+  return (
     <div style={{position:"fixed",inset:0,background:"#000a",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999,padding:16}}>
       <div style={{background:"#1e293b",borderRadius:12,padding:"22px 24px",width:"100%",maxWidth:420,border:"1px solid #334155"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -184,30 +117,29 @@ function Modal({title,onClose,children}){
   );
 }
 
-function MatchCard({m,onScore,onDel}){
-  const done=m.done;
-  const wa=done?calcWins(m.sa):null, wb=done?calcWins(m.sb):null;
+function MatchCard({m,onScore,onDel}) {
+  const wa=m.done?calcWins(m.sa):null, wb=m.done?calcWins(m.sb):null;
   const winner=wa&&wb?(wa.w>wb.w?m.a:m.b):null;
-  const editable=isEditable(m), locked=done&&!editable;
-  return(
-    <div style={{background:"#111827",border:`1px solid ${locked?"#2d1f00":done?"#14532d55":"#334155"}`,borderRadius:10,padding:"14px 16px",marginBottom:10,display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+  const locked=m.done&&!isEditable(m);
+  return (
+    <div style={{background:"#111827",border:`1px solid ${locked?"#2d1f00":m.done?"#14532d55":"#334155"}`,borderRadius:10,padding:"14px 16px",marginBottom:10,display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
       <div style={{flex:1,minWidth:180,display:"flex",alignItems:"center",gap:12}}>
         <div style={{flex:1}}>
           <div style={{fontWeight:700,fontSize:14,color:winner===m.a?"#34d399":"#cbd5e1"}}>{m.a}</div>
-          {done&&<div style={{fontSize:17,fontWeight:800,color:winner===m.a?"#34d399":"#475569",letterSpacing:1}}>{m.sa}</div>}
+          {m.done&&<div style={{fontSize:17,fontWeight:800,color:winner===m.a?"#34d399":"#475569",letterSpacing:1}}>{m.sa}</div>}
         </div>
         <div style={{color:"#475569",fontSize:11,fontWeight:700}}>VS</div>
         <div style={{flex:1,textAlign:"right"}}>
           <div style={{fontWeight:700,fontSize:14,color:winner===m.b?"#34d399":"#cbd5e1"}}>{m.b}</div>
-          {done&&<div style={{fontSize:17,fontWeight:800,color:winner===m.b?"#34d399":"#475569",letterSpacing:1,textAlign:"right"}}>{m.sb}</div>}
+          {m.done&&<div style={{fontSize:17,fontWeight:800,color:winner===m.b?"#34d399":"#475569",letterSpacing:1,textAlign:"right"}}>{m.sb}</div>}
         </div>
       </div>
       <div style={{textAlign:"right"}}>
         <div style={{fontSize:12,color:"#64748b"}}>{m.date}{m.time?` · ${m.time}`:""}</div>
-        {done&&winner&&<div style={{fontSize:12,color:"#10b981",marginTop:3}}>🏆 {winner}</div>}
+        {m.done&&winner&&<div style={{fontSize:12,color:"#10b981",marginTop:3}}>🏆 {winner}</div>}
         {locked&&<div style={{fontSize:11,color:"#f59e0b",marginTop:3}}>🔒 Locked after 24h</div>}
         <div style={{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}}>
-          {!locked&&<button onClick={onScore} style={{padding:"6px 12px",background:"#1e3a5f",border:"none",borderRadius:6,color:"#93c5fd",fontSize:12,cursor:"pointer"}}>{done?"✏️ Edit":"📝 Score"}</button>}
+          {!locked&&<button onClick={onScore} style={{padding:"6px 12px",background:"#1e3a5f",border:"none",borderRadius:6,color:"#93c5fd",fontSize:12,cursor:"pointer"}}>{m.done?"✏️ Edit":"📝 Score"}</button>}
           <button onClick={onDel} style={{padding:"6px 10px",background:"#2d1515",border:"none",borderRadius:6,color:"#f87171",fontSize:12,cursor:"pointer"}}>🗑</button>
         </div>
       </div>
@@ -215,80 +147,75 @@ function MatchCard({m,onScore,onDel}){
   );
 }
 
-export default function App(){
-  const [data,setData]     = useState(null);
-  const [status,setStatus] = useState("loading");
-  const [tab,setTab]       = useState("schedule");
-  const [lg,setLg]         = useState("doubles");
-  const [modal,setModal]   = useState(null);
-  const [mf,setMf]         = useState({});
+export default function App() {
+  const [data,   setData]   = useState(null);
+  const [status, setStatus] = useState("loading");
+  const [tab,    setTab]    = useState("schedule");
+  const [lg,     setLg]     = useState("doubles");
+  const [modal,  setModal]  = useState(null);
+  const [mf,     setMf]     = useState({});
 
   const FUTURE      = futureDates();
   const defaultDate = FUTURE[0]||ALL_DATES[0];
 
   useEffect(()=>{
     dbLoad().then(r=>{
-      if(r){ setData(r); setStatus("ok"); }
-      else {
-        // First time — seed with defaults
-        dbSave(DEFAULT_DB).then(()=>{ setData(DEFAULT_DB); setStatus("ok"); });
-      }
+      if (r) { setData(r); setStatus("ok"); }
+      else   { dbSave(DEFAULT).then(()=>{ setData(DEFAULT); setStatus("ok"); }); }
     }).catch(()=>setStatus("error"));
   },[]);
 
-  async function upd(fn){
+  async function upd(fn) {
     const nd=fn(data);
     setData(nd);
     setStatus("saving");
-    try {
-      await dbSave(nd);
-      setStatus("ok");
-    } catch {
-      setStatus("error");
-    }
+    await dbSave(nd);
+    setStatus("ok");
   }
 
-  if(status==="loading") return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#64748b",fontSize:15}}>🎾 Loading league data…</div>;
-  if(status==="error")   return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#ef4444",fontSize:15,textAlign:"center",padding:24}}>❌ Could not load data. Check your connection and refresh.</div>;
+  if (status==="loading") return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#64748b",fontSize:15}}>🎾 Loading…</div>;
+  if (status==="error")   return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#ef4444",fontSize:15,padding:24,textAlign:"center"}}>❌ Could not load data. Check connection and refresh.</div>;
 
   const isD     = lg==="doubles";
-  const teams   = isD ? data.doubles : data.singles;
-  const avail   = isD ? data.dAvail  : data.sAvail;
-  const matches = isD ? data.dMatches: data.sMatches;
+  const teams   = isD?data.doubles :data.singles;
+  const avail   = isD?data.dAvail  :data.sAvail;
+  const matches = isD?data.dMatches:data.sMatches;
   const stand   = calcStandings(matches,teams);
   const pending = matches.filter(m=>!m.done);
-  const complete= matches.filter(m=>m.done);
+  const complete= matches.filter(m=> m.done);
 
-  async function addMatch(){
+  async function addMatch() {
     await upd(d=>{
       const m={id:isD?`d${d.did}`:`s${d.sid}`,a:mf.a,b:mf.b,date:mf.date||defaultDate,time:mf.time||"",sa:"",sb:"",done:false};
       return isD?{...d,dMatches:[...d.dMatches,m],did:d.did+1}:{...d,sMatches:[...d.sMatches,m],sid:d.sid+1};
-    }); setModal(null);
+    });
+    setModal(null);
   }
-  function delMatch(id){
-    upd(d=>isD?{...d,dMatches:d.dMatches.filter(m=>m.id!==id)}:{...d,sMatches:d.sMatches.filter(m=>m.id!==id)});
+  async function delMatch(id) {
+    await upd(d=>isD?{...d,dMatches:d.dMatches.filter(m=>m.id!==id)}:{...d,sMatches:d.sMatches.filter(m=>m.id!==id)});
   }
-  async function saveScore(){
+  async function saveScore() {
     await upd(d=>{
       const stamp=Date.now();
       return isD
         ?{...d,dMatches:d.dMatches.map(m=>m.id===mf.id?{...m,sa:mf.sa,sb:mf.sb,done:true,completedAt:m.completedAt||stamp}:m)}
         :{...d,sMatches:d.sMatches.map(m=>m.id===mf.id?{...m,sa:mf.sa,sb:mf.sb,done:true,completedAt:m.completedAt||stamp}:m)};
-    }); setModal(null);
+    });
+    setModal(null);
   }
-  async function addAvail(){
+  async function addAvail() {
     await upd(d=>{const k=isD?"dAvail":"sAvail";return{...d,[k]:{...d[k],[mf.name]:{...(d[k][mf.name]||{}),[mf.date]:mf.note}}};});
     setModal(null);
   }
-  function removeAvail(name,date){
+  function removeAvail(name,date) {
     upd(d=>{const k=isD?"dAvail":"sAvail";const row={...(d[k][name]||{})};delete row[date];return{...d,[k]:{...d[k],[name]:row}};});
   }
-  async function addTeam(){
+  async function addTeam() {
     const name=mf.teamName?.trim(); if(!name) return;
     await upd(d=>isD?{...d,doubles:[...d.doubles,name]}:{...d,singles:[...d.singles,name]});
     setModal(null);
   }
-  function removeTeam(name){
+  function removeTeam(name) {
     if(!window.confirm(`Remove "${name}"? Their matches will be kept.`)) return;
     upd(d=>isD?{...d,doubles:d.doubles.filter(t=>t!==name)}:{...d,singles:d.singles.filter(t=>t!==name)});
   }
@@ -296,7 +223,7 @@ export default function App(){
   const statusColor={ok:"#10b981",saving:"#f59e0b",error:"#ef4444"}[status]||"#64748b";
   const statusText ={ok:"✓ Saved",saving:"💾 Saving…",error:"⚠ Save failed"}[status];
 
-  return(
+  return (
     <div style={{minHeight:"100vh",background:"#0f172a",color:"#e2e8f0",fontFamily:"system-ui,sans-serif"}}>
       <style>{`*{box-sizing:border-box}select,input{color-scheme:dark}button:disabled{opacity:.4;cursor:not-allowed}`}</style>
 
@@ -331,7 +258,7 @@ export default function App(){
           </div>
         )}
 
-        {/* ── SCHEDULE ── */}
+        {/* SCHEDULE */}
         {tab==="schedule"&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -356,9 +283,7 @@ export default function App(){
               <table style={{borderCollapse:"collapse",minWidth:700,width:"100%"}}>
                 <thead>
                   <tr style={{background:"#0a1020"}}>
-                    <th style={{padding:"9px 12px",textAlign:"left",color:"#64748b",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:.5,borderBottom:"1px solid #1e293b",whiteSpace:"nowrap",position:"sticky",left:0,zIndex:2,background:"#0a1020"}}>
-                      {isD?"Team":"Player"}
-                    </th>
+                    <th style={{padding:"9px 12px",textAlign:"left",color:"#64748b",fontSize:11,fontWeight:600,textTransform:"uppercase",borderBottom:"1px solid #1e293b",whiteSpace:"nowrap",position:"sticky",left:0,zIndex:2,background:"#0a1020"}}>{isD?"Team":"Player"}</th>
                     {ALL_DATES.map((d,i)=>(
                       <th key={d} style={{padding:"9px 4px",color:"#64748b",fontSize:11,fontWeight:600,borderBottom:"1px solid #1e293b",textAlign:"center",minWidth:64}}>
                         <div style={{color:"#93c5fd"}}>{d}</div>
@@ -371,13 +296,11 @@ export default function App(){
                 <tbody>
                   {teams.map((name,ri)=>(
                     <tr key={name} style={{background:ri%2===0?"#111827":"#0f172a"}}>
-                      <td style={{padding:"8px 12px",fontWeight:700,color:"#cbd5e1",fontSize:13,borderBottom:"1px solid #1e293b",whiteSpace:"nowrap",position:"sticky",left:0,zIndex:1,background:ri%2===0?"#111827":"#0f172a"}}>
-                        {name}
-                      </td>
+                      <td style={{padding:"8px 12px",fontWeight:700,color:"#cbd5e1",fontSize:13,borderBottom:"1px solid #1e293b",whiteSpace:"nowrap",position:"sticky",left:0,zIndex:1,background:ri%2===0?"#111827":"#0f172a"}}>{name}</td>
                       {ALL_DATES.map(d=>{
                         const note=avail[name]?.[d];
-                        const booked=note&&/w\//i.test(note);
-                        return(
+                        const booked=note&&/w /i.test(note);
+                        return (
                           <td key={d} style={{padding:"3px 3px",borderBottom:"1px solid #1e293b",verticalAlign:"top"}}>
                             {note
                               ?<div onClick={()=>removeAvail(name,d)} title="Click to remove" style={{background:booked?"#064e3b":"#1e3a5f",border:`1px solid ${booked?"#10b98155":"#3b82f655"}`,borderRadius:5,padding:"3px 5px",color:booked?"#10b981":"#93c5fd",fontSize:10,cursor:"pointer",lineHeight:1.4}}>{note}</div>
@@ -398,7 +321,7 @@ export default function App(){
           </div>
         )}
 
-        {/* ── SCORES ── */}
+        {/* SCORES */}
         {tab==="scores"&&(
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -421,32 +344,30 @@ export default function App(){
           </div>
         )}
 
-        {/* ── LEADERBOARD ── */}
+        {/* LEADERBOARD */}
         {tab==="leaderboard"&&(
           <div>
             <div style={{fontWeight:700,color:"#fff",marginBottom:20,fontSize:16}}>{isD?"Doubles":"Singles"} Standings</div>
             {stand.filter(s=>s.p>0).length===0
-              ?<div style={{textAlign:"center",color:"#64748b",padding:"60px 0"}}>No completed matches yet — enter scores to see rankings.</div>
+              ?<div style={{textAlign:"center",color:"#64748b",padding:"60px 0"}}>No completed matches yet.</div>
               :(
                 <>
                   <div style={{display:"flex",justifyContent:"center",alignItems:"flex-end",gap:12,marginBottom:32}}>
-                    {(()=>{
+                    {[1,0,2].map(rank=>{
                       const played=stand.filter(s=>s.p>0);
-                      return [1,0,2].map(rank=>{
-                        const s=played[rank]; if(!s) return <div key={rank} style={{width:120}}/>;
-                        const H={0:180,1:130,2:90}[rank];
-                        const C=["#FFD700","#C0C0C0","#CD7F32"][rank];
-                        const E=["🥇","🥈","🥉"][rank];
-                        return(
-                          <div key={s.n} style={{textAlign:"center",width:120}}>
-                            <div style={{fontSize:26}}>{E}</div>
-                            <div style={{fontWeight:700,fontSize:12,color:"#e2e8f0",margin:"4px 0 2px"}}>{s.n}</div>
-                            <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>{s.pts}pts · {s.w}W {s.l}L</div>
-                            <div style={{height:H,borderRadius:"6px 6px 0 0",background:`${C}18`,border:`2px solid ${C}88`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,fontWeight:900,color:C}}>{rank+1}</div>
-                          </div>
-                        );
-                      });
-                    })()}
+                      const s=played[rank]; if(!s) return <div key={rank} style={{width:120}}/>;
+                      const H={0:180,1:130,2:90}[rank];
+                      const C=["#FFD700","#C0C0C0","#CD7F32"][rank];
+                      const E=["🥇","🥈","🥉"][rank];
+                      return (
+                        <div key={s.n} style={{textAlign:"center",width:120}}>
+                          <div style={{fontSize:26}}>{E}</div>
+                          <div style={{fontWeight:700,fontSize:12,color:"#e2e8f0",margin:"4px 0 2px"}}>{s.n}</div>
+                          <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>{s.pts}pts · {s.w}W {s.l}L</div>
+                          <div style={{height:H,borderRadius:"6px 6px 0 0",background:`${C}18`,border:`2px solid ${C}88`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,fontWeight:900,color:C}}>{rank+1}</div>
+                        </div>
+                      );
+                    })}
                   </div>
                   <div style={{border:"1px solid #1e293b",borderRadius:8,overflow:"hidden"}}>
                     <table style={{width:"100%",borderCollapse:"collapse"}}>
@@ -477,7 +398,7 @@ export default function App(){
           </div>
         )}
 
-        {/* ── MANAGE ── */}
+        {/* MANAGE */}
         {tab==="manage"&&(
           <div>
             <div style={{fontWeight:700,color:"#fff",fontSize:16,marginBottom:20}}>Manage Teams & Players</div>
@@ -513,7 +434,7 @@ export default function App(){
         )}
       </div>
 
-      {/* ── MODALS ── */}
+      {/* MODALS */}
       {modal==="match"&&(
         <Modal title={`Schedule ${isD?"Doubles":"Singles"} Match`} onClose={()=>setModal(null)}>
           <label style={lbl}>{isD?"Team 1":"Player 1"}</label>
@@ -538,7 +459,6 @@ export default function App(){
           </div>
         </Modal>
       )}
-
       {modal==="score"&&(
         <Modal title="Enter Score" onClose={()=>setModal(null)}>
           <div style={{background:"#0f172a",borderRadius:8,padding:12,textAlign:"center",marginBottom:4}}>
@@ -556,7 +476,6 @@ export default function App(){
           </div>
         </Modal>
       )}
-
       {modal==="avail"&&(
         <Modal title={`Add Availability — ${mf.name}`} onClose={()=>setModal(null)}>
           <label style={lbl}>Date</label>
@@ -574,19 +493,11 @@ export default function App(){
           </div>
         </Modal>
       )}
-
       {modal==="addteam"&&(
         <Modal title={isD?"Add Doubles Team":"Add Singles Player"} onClose={()=>setModal(null)}>
-          <label style={lbl}>{isD?"Team Name (e.g. Rahul/Vikram)":"Player Name"}</label>
-          <input
-            style={inp}
-            placeholder={isD?"Player1/Player2":"e.g. Rahul"}
-            value={mf.teamName||""}
-            onChange={e=>setMf(f=>({...f,teamName:e.target.value}))}
-            onKeyDown={e=>{if(e.key==="Enter"&&mf.teamName?.trim()) addTeam();}}
-            autoFocus
-          />
-          {isD&&<div style={{fontSize:11,color:"#64748b",marginTop:6}}>Use "Name1/Name2" format to match the other teams</div>}
+          <label style={lbl}>{isD?"Team Name":"Player Name"}</label>
+          <input style={inp} placeholder={isD?"e.g. Rahul/Vikram":"e.g. Rahul"} value={mf.teamName||""} onChange={e=>setMf(f=>({...f,teamName:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter"&&mf.teamName?.trim()) addTeam();}} autoFocus/>
+          {isD&&<div style={{fontSize:11,color:"#64748b",marginTop:6}}>Use "Name1/Name2" format</div>}
           <div style={{display:"flex",gap:8,marginTop:18}}>
             <button style={pbtn} disabled={!mf.teamName?.trim()} onClick={addTeam}>Add</button>
             <button style={sbtn} onClick={()=>setModal(null)}>Cancel</button>
