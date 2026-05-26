@@ -1,7 +1,5 @@
 import { useState, useEffect } from "react";
 
-// ─── Firebase ────────────────────────────────────────────────────────────────
-// Store the ENTIRE state as one JSON string — avoids ALL Firebase key restrictions
 const FB_URL = "https://tristate-tennis-default-rtdb.firebaseio.com/state.json";
 
 async function dbLoad() {
@@ -11,7 +9,6 @@ async function dbLoad() {
     return val ? JSON.parse(val) : null;
   } catch { return null; }
 }
-
 async function dbSave(data) {
   try {
     await fetch(FB_URL, {
@@ -22,7 +19,6 @@ async function dbSave(data) {
   } catch(e) { console.error("Save error", e); }
 }
 
-// ─── Dates ───────────────────────────────────────────────────────────────────
 function genDates() {
   const dates=[], days=[], names=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   const start=new Date(2026,4,1), end=new Date(2026,6,5);
@@ -36,16 +32,24 @@ const {dates:ALL_DATES,days:ALL_DAYS} = genDates();
 
 function futureDates() {
   const today=new Date(); today.setHours(0,0,0,0);
-  return ALL_DATES.filter(d=>{
-    const [m,dy]=d.split("/").map(Number);
-    return new Date(2026,m-1,dy)>=today;
-  });
+  return ALL_DATES.filter(d=>{ const [m,dy]=d.split("/").map(Number); return new Date(2026,m-1,dy)>=today; });
 }
 
-// ─── Default data ─────────────────────────────────────────────────────────────
+// ─── Groups ──────────────────────────────────────────────────────────────────
+const GROUPS = {
+  doubles: {
+    A: ["Dhar/Vineet","Akash/Micky","Bobby/Satendra","Shailesh/Uzair"],
+    B: ["Nitin/Ashish","Jai/Deep","Tarun/Sumit","Sanjay/Ravi"],
+  },
+  singles: {
+    A: ["Bobby","Tushar","Pratyush","Sanjay","Akash"],
+    B: ["Dhar","Sumit","Deep","Ashish","Viraj"],
+  },
+};
+
 const DEFAULT = {
-  doubles:  ["Nitin/Ashish","Jai/Deep","Tarun/Sumit","Bobby/Satendra","Akash/Micky","Dhar/Vineet","Sanjay/Ravi"],
-  singles:  ["Ashish","Deep","Sumit","Bobby","Akash","Dharam","Sanjay","Pratush","Viraj","Tushar"],
+  doubles:  ["Nitin/Ashish","Jai/Deep","Tarun/Sumit","Bobby/Satendra","Akash/Micky","Dhar/Vineet","Sanjay/Ravi","Shailesh/Uzair"],
+  singles:  ["Ashish","Deep","Sumit","Bobby","Akash","Dhar","Sanjay","Pratyush","Viraj","Tushar"],
   dAvail:   {
     "Nitin/Ashish":  {"5/17":"4pm w Jai-Deep","5/18":"6pm avail","5/22":"5:30pm avail"},
     "Jai/Deep":      {"5/17":"4pm w Nitin-Ashish"},
@@ -55,16 +59,12 @@ const DEFAULT = {
     "Dhar/Vineet":   {"5/19":"6pm onwards"},
     "Sanjay/Ravi":   {"5/16":"5pm avail","5/17":"Anytime","5/20":"6pm avail","5/21":"6pm avail"},
   },
-  sAvail:   {"Dharam":{"5/15":"5pm+","5/16":"8-10am"},"Viraj":{"5/15":"5pm+"}},
-  dMatches: [
-    {id:"d1",a:"Nitin/Ashish",  b:"Jai/Deep",     date:"5/17",time:"4pm",sa:"",sb:"",done:false},
-    {id:"d2",a:"Bobby/Satendra",b:"Akash/Micky",  date:"5/18",time:"6pm",sa:"",sb:"",done:false},
-  ],
+  sAvail:   {"Dhar":{"5/15":"5pm+","5/16":"8-10am"},"Viraj":{"5/15":"5pm+"}},
+  dMatches: [],
   sMatches: [],
-  did:3, sid:1,
+  did:1, sid:1,
 };
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 function calcWins(score) {
   if (!score) return null;
   let w=0,l=0;
@@ -75,19 +75,22 @@ function calcWins(score) {
   return {w,l};
 }
 
-function calcStandings(matches,players) {
+// ─── Points table per group (2pts per win) ───────────────────────────────────
+function calcGroupStandings(matches, groupMembers) {
   const st={};
-  players.forEach(p=>{st[p]={p:0,w:0,l:0,pts:0};});
+  groupMembers.forEach(p=>{ st[p]={mp:0,w:0,l:0,sw:0,sl:0,pts:0}; });
   for (const m of matches) {
     if (!m.done) continue;
-    const wa=calcWins(m.sa),wb=calcWins(m.sb); if(!wa||!wb) continue;
-    if (!st[m.a]) st[m.a]={p:0,w:0,l:0,pts:0};
-    if (!st[m.b]) st[m.b]={p:0,w:0,l:0,pts:0};
-    st[m.a].p++; st[m.b].p++;
-    if (wa.w>wb.w){st[m.a].w++;st[m.a].pts+=3;st[m.b].l++;}
-    else          {st[m.b].w++;st[m.b].pts+=3;st[m.a].l++;}
+    if (!groupMembers.includes(m.a) || !groupMembers.includes(m.b)) continue;
+    const wa=calcWins(m.sa), wb=calcWins(m.sb); if(!wa||!wb) continue;
+    st[m.a].mp++; st[m.b].mp++;
+    st[m.a].sw+=wa.w; st[m.a].sl+=wa.l;
+    st[m.b].sw+=wb.w; st[m.b].sl+=wb.l;
+    if (wa.w>wb.w) { st[m.a].w++; st[m.a].pts+=2; st[m.b].l++; }
+    else           { st[m.b].w++; st[m.b].pts+=2; st[m.a].l++; }
   }
-  return Object.entries(st).map(([n,v])=>({n,...v})).sort((a,b)=>b.pts-a.pts||b.w-a.w);
+  return Object.entries(st).map(([n,v])=>({n,...v}))
+    .sort((a,b)=>b.pts-a.pts||b.w-a.w||(b.sw-b.sl)-(a.sw-a.sl));
 }
 
 function isEditable(m) {
@@ -147,6 +150,112 @@ function MatchCard({m,onScore,onDel}) {
   );
 }
 
+// ─── Group Table Component ────────────────────────────────────────────────────
+function GroupTable({label,standings}) {
+  const top2 = standings.slice(0,2).map(s=>s.n);
+  return (
+    <div style={{marginBottom:24}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+        <div style={{background:"#1e3a5f",color:"#93c5fd",fontWeight:800,fontSize:13,padding:"4px 12px",borderRadius:6}}>GROUP {label}</div>
+        <div style={{fontSize:11,color:"#64748b"}}>Top 2 advance to semi-finals</div>
+      </div>
+      <div style={{border:"1px solid #1e293b",borderRadius:8,overflow:"hidden"}}>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead>
+            <tr style={{background:"#0a1020"}}>
+              {["Team/Player","MP","W","L","Pts"].map((h,i)=>(
+                <th key={h} style={{padding:"9px 12px",fontSize:11,color:"#64748b",fontWeight:600,textTransform:"uppercase",letterSpacing:.5,textAlign:i===0?"left":"center",borderBottom:"1px solid #1e293b"}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {standings.map((s,i)=>{
+              const qualifies = i < 2;
+              return (
+                <tr key={s.n} style={{background:i%2===0?"#111827":"#0f172a",borderLeft:qualifies?"3px solid #10b981":"3px solid transparent"}}>
+                  <td style={{padding:"11px 12px",borderBottom:"1px solid #1e293b"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      {qualifies && <span style={{fontSize:10,background:"#064e3b",color:"#10b981",padding:"2px 6px",borderRadius:4,fontWeight:700,whiteSpace:"nowrap"}}>Q</span>}
+                      <span style={{fontWeight:700,color:qualifies?"#34d399":"#cbd5e1"}}>{s.n}</span>
+                    </div>
+                  </td>
+                  <td style={{padding:"11px 12px",textAlign:"center",color:"#64748b",borderBottom:"1px solid #1e293b"}}>{s.mp}</td>
+                  <td style={{padding:"11px 12px",textAlign:"center",color:"#10b981",fontWeight:700,borderBottom:"1px solid #1e293b"}}>{s.w}</td>
+                  <td style={{padding:"11px 12px",textAlign:"center",color:"#ef4444",borderBottom:"1px solid #1e293b"}}>{s.l}</td>
+                  <td style={{padding:"11px 12px",textAlign:"center",color:"#3b82f6",fontWeight:800,fontSize:15,borderBottom:"1px solid #1e293b"}}>{s.pts}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Knockout Bracket ─────────────────────────────────────────────────────────
+function KnockoutBracket({standA, standB}) {
+  const sf1a = standA[0]?.n || "1st Group A";
+  const sf1b = standB[1]?.n || "2nd Group B";
+  const sf2a = standB[0]?.n || "1st Group B";
+  const sf2b = standA[1]?.n || "2nd Group A";
+
+  const boxStyle = (filled) => ({
+    background: filled?"#0a1e3a":"#111827",
+    border:`1px solid ${filled?"#3b82f6":"#334155"}`,
+    borderRadius:8, padding:"10px 14px",
+    color: filled?"#93c5fd":"#475569",
+    fontWeight:700, fontSize:13, minWidth:140, textAlign:"center",
+  });
+  const vsStyle = {color:"#475569",fontSize:11,fontWeight:700,textAlign:"center",margin:"4px 0"};
+  const lineStyle = {width:2,background:"#334155",alignSelf:"stretch",margin:"0 auto"};
+
+  return (
+    <div style={{marginTop:8}}>
+      <div style={{fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:16}}>Knockout Stage</div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:0,overflowX:"auto"}}>
+
+        {/* SF1 */}
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:160}}>
+          <div style={{fontSize:11,color:"#f59e0b",fontWeight:700,marginBottom:6,letterSpacing:1}}>SEMI FINAL 1</div>
+          <div style={boxStyle(!!standA[0])}>{sf1a}</div>
+          <div style={vsStyle}>vs</div>
+          <div style={boxStyle(!!standB[1])}>{sf1b}</div>
+        </div>
+
+        {/* Arrow SF1 → Final */}
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:60}}>
+          <div style={{height:1,width:"100%",background:"#334155",marginTop:28}}/>
+        </div>
+
+        {/* Final */}
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:160}}>
+          <div style={{fontSize:11,color:"#FFD700",fontWeight:800,marginBottom:6,letterSpacing:1}}>🏆 FINAL</div>
+          <div style={boxStyle(false)}>Winner SF1</div>
+          <div style={vsStyle}>vs</div>
+          <div style={boxStyle(false)}>Winner SF2</div>
+        </div>
+
+        {/* Arrow SF2 → Final */}
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:60}}>
+          <div style={{height:1,width:"100%",background:"#334155",marginTop:28}}/>
+        </div>
+
+        {/* SF2 */}
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:160}}>
+          <div style={{fontSize:11,color:"#f59e0b",fontWeight:700,marginBottom:6,letterSpacing:1}}>SEMI FINAL 2</div>
+          <div style={boxStyle(!!standB[0])}>{sf2a}</div>
+          <div style={vsStyle}>vs</div>
+          <div style={boxStyle(!!standA[1])}>{sf2b}</div>
+        </div>
+
+      </div>
+      <div style={{marginTop:12,fontSize:11,color:"#64748b",textAlign:"center"}}>1st Group A vs 2nd Group B · 1st Group B vs 2nd Group A</div>
+    </div>
+  );
+}
+
+// ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [data,   setData]   = useState(null);
   const [status, setStatus] = useState("loading");
@@ -160,27 +269,28 @@ export default function App() {
 
   useEffect(()=>{
     dbLoad().then(r=>{
-      if (r) { setData(r); setStatus("ok"); }
-      else   { dbSave(DEFAULT).then(()=>{ setData(DEFAULT); setStatus("ok"); }); }
+      if(r){ setData(r); setStatus("ok"); }
+      else { dbSave(DEFAULT).then(()=>{ setData(DEFAULT); setStatus("ok"); }); }
     }).catch(()=>setStatus("error"));
   },[]);
 
   async function upd(fn) {
-    const nd=fn(data);
-    setData(nd);
-    setStatus("saving");
-    await dbSave(nd);
-    setStatus("ok");
+    const nd=fn(data); setData(nd); setStatus("saving");
+    await dbSave(nd); setStatus("ok");
   }
 
-  if (status==="loading") return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#64748b",fontSize:15}}>🎾 Loading…</div>;
-  if (status==="error")   return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#ef4444",fontSize:15,padding:24,textAlign:"center"}}>❌ Could not load data. Check connection and refresh.</div>;
+  if(status==="loading") return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#64748b",fontSize:15}}>🎾 Loading…</div>;
+  if(status==="error")   return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#ef4444",fontSize:15,padding:24,textAlign:"center"}}>❌ Could not load data. Check connection and refresh.</div>;
 
   const isD     = lg==="doubles";
   const teams   = isD?data.doubles :data.singles;
   const avail   = isD?data.dAvail  :data.sAvail;
   const matches = isD?data.dMatches:data.sMatches;
-  const stand   = calcStandings(matches,teams);
+  const groups  = isD?GROUPS.doubles:GROUPS.singles;
+
+  const standA  = calcGroupStandings(matches, groups.A);
+  const standB  = calcGroupStandings(matches, groups.B);
+
   const pending = matches.filter(m=>!m.done);
   const complete= matches.filter(m=> m.done);
 
@@ -188,8 +298,7 @@ export default function App() {
     await upd(d=>{
       const m={id:isD?`d${d.did}`:`s${d.sid}`,a:mf.a,b:mf.b,date:mf.date||defaultDate,time:mf.time||"",sa:"",sb:"",done:false};
       return isD?{...d,dMatches:[...d.dMatches,m],did:d.did+1}:{...d,sMatches:[...d.sMatches,m],sid:d.sid+1};
-    });
-    setModal(null);
+    }); setModal(null);
   }
   async function delMatch(id) {
     await upd(d=>isD?{...d,dMatches:d.dMatches.filter(m=>m.id!==id)}:{...d,sMatches:d.sMatches.filter(m=>m.id!==id)});
@@ -200,8 +309,7 @@ export default function App() {
       return isD
         ?{...d,dMatches:d.dMatches.map(m=>m.id===mf.id?{...m,sa:mf.sa,sb:mf.sb,done:true,completedAt:m.completedAt||stamp}:m)}
         :{...d,sMatches:d.sMatches.map(m=>m.id===mf.id?{...m,sa:mf.sa,sb:mf.sb,done:true,completedAt:m.completedAt||stamp}:m)};
-    });
-    setModal(null);
+    }); setModal(null);
   }
   async function addAvail() {
     await upd(d=>{const k=isD?"dAvail":"sAvail";return{...d,[k]:{...d[k],[mf.name]:{...(d[k][mf.name]||{}),[mf.date]:mf.note}}};});
@@ -310,7 +418,7 @@ export default function App() {
                         );
                       })}
                       <td style={{padding:"3px 4px",borderBottom:"1px solid #1e293b",textAlign:"center",position:"sticky",right:0,background:ri%2===0?"#111827":"#0f172a"}}>
-                        <button onClick={()=>{setModal("avail");setMf({name,date:defaultDate,note:""}); }} style={{background:"none",border:"1px solid #334155",borderRadius:5,color:"#64748b",cursor:"pointer",padding:"2px 7px",fontSize:14,lineHeight:1.5}}>+</button>
+                        <button onClick={()=>{setModal("avail");setMf({name,date:defaultDate,note:""});}} style={{background:"none",border:"1px solid #334155",borderRadius:5,color:"#64748b",cursor:"pointer",padding:"2px 7px",fontSize:14,lineHeight:1.5}}>+</button>
                       </td>
                     </tr>
                   ))}
@@ -332,7 +440,7 @@ export default function App() {
             {pending.length>0&&(
               <div style={{marginBottom:24}}>
                 <div style={{fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>Pending Score Entry</div>
-                {pending.map(m=><MatchCard key={m.id} m={m} onScore={()=>{setModal("score");setMf({id:m.id,a:m.a,b:m.b,date:m.date,time:m.time,sa:"",sb:""});}} onDel={()=>delMatch(m.id)}/>)}
+                {pending.map(m=><MatchCard key={m.id} m={m} onScore={()=>{setModal("score");setMf({id:m.id,a:m.a,b:m.b,date:m.date,time:m.time,sa:"",sb:""}); }} onDel={()=>delMatch(m.id)}/>)}
               </div>
             )}
             {complete.length>0&&(
@@ -347,54 +455,17 @@ export default function App() {
         {/* LEADERBOARD */}
         {tab==="leaderboard"&&(
           <div>
-            <div style={{fontWeight:700,color:"#fff",marginBottom:20,fontSize:16}}>{isD?"Doubles":"Singles"} Standings</div>
-            {stand.filter(s=>s.p>0).length===0
-              ?<div style={{textAlign:"center",color:"#64748b",padding:"60px 0"}}>No completed matches yet.</div>
-              :(
-                <>
-                  <div style={{display:"flex",justifyContent:"center",alignItems:"flex-end",gap:12,marginBottom:32}}>
-                    {[1,0,2].map(rank=>{
-                      const played=stand.filter(s=>s.p>0);
-                      const s=played[rank]; if(!s) return <div key={rank} style={{width:120}}/>;
-                      const H={0:180,1:130,2:90}[rank];
-                      const C=["#FFD700","#C0C0C0","#CD7F32"][rank];
-                      const E=["🥇","🥈","🥉"][rank];
-                      return (
-                        <div key={s.n} style={{textAlign:"center",width:120}}>
-                          <div style={{fontSize:26}}>{E}</div>
-                          <div style={{fontWeight:700,fontSize:12,color:"#e2e8f0",margin:"4px 0 2px"}}>{s.n}</div>
-                          <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>{s.pts}pts · {s.w}W {s.l}L</div>
-                          <div style={{height:H,borderRadius:"6px 6px 0 0",background:`${C}18`,border:`2px solid ${C}88`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,fontWeight:900,color:C}}>{rank+1}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div style={{border:"1px solid #1e293b",borderRadius:8,overflow:"hidden"}}>
-                    <table style={{width:"100%",borderCollapse:"collapse"}}>
-                      <thead>
-                        <tr style={{background:"#0a1020"}}>
-                          {["#","Name","Played","Won","Lost","Points"].map((h,i)=>(
-                            <th key={h} style={{padding:"10px 12px",fontSize:11,color:"#64748b",fontWeight:600,textTransform:"uppercase",letterSpacing:.5,textAlign:i===1?"left":"center",borderBottom:"1px solid #1e293b"}}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {stand.map((s,i)=>(
-                          <tr key={s.n} style={{background:i%2===0?"#111827":"#0f172a"}}>
-                            <td style={{padding:"11px 12px",textAlign:"center",fontSize:16,borderBottom:"1px solid #1e293b"}}>{["🥇","🥈","🥉"][i]||`${i+1}`}</td>
-                            <td style={{padding:"11px 12px",fontWeight:700,color:"#cbd5e1",borderBottom:"1px solid #1e293b"}}>{s.n}</td>
-                            <td style={{padding:"11px 12px",textAlign:"center",color:"#64748b",borderBottom:"1px solid #1e293b"}}>{s.p}</td>
-                            <td style={{padding:"11px 12px",textAlign:"center",color:"#10b981",fontWeight:700,borderBottom:"1px solid #1e293b"}}>{s.w}</td>
-                            <td style={{padding:"11px 12px",textAlign:"center",color:"#ef4444",borderBottom:"1px solid #1e293b"}}>{s.l}</td>
-                            <td style={{padding:"11px 12px",textAlign:"center",color:"#3b82f6",fontWeight:800,fontSize:15,borderBottom:"1px solid #1e293b"}}>{s.pts}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )
-            }
+            <div style={{fontWeight:700,color:"#fff",marginBottom:20,fontSize:16}}>{isD?"Doubles":"Singles"} Points Table</div>
+
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:24,marginBottom:36}}>
+              <GroupTable label="A" standings={standA}/>
+              <GroupTable label="B" standings={standB}/>
+            </div>
+
+            {/* Knockout bracket */}
+            <div style={{background:"#0a1020",border:"1px solid #1e293b",borderRadius:12,padding:"20px 16px"}}>
+              <KnockoutBracket standA={standA} standB={standB}/>
+            </div>
           </div>
         )}
 
