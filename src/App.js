@@ -758,29 +758,19 @@ function PollsTab({data, upd, allPlayers}) {
 
   return (
     <div style={{maxWidth:640,margin:"0 auto"}}>
-      {/* Name picker */}
-      {!userSet ? (
-        <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:"24px",marginBottom:20,textAlign:"center"}}>
-          <div style={{fontSize:16,fontWeight:700,color:"#fff",marginBottom:4}}>Who are you?</div>
-          <div style={{fontSize:12,color:"#64748b",marginBottom:16}}>Pick your name to vote and bet</div>
-          <select style={{width:"100%",padding:"9px 11px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:12}}
-            value={user} onChange={e=>setUser(e.target.value)}>
-            <option value="">Select your name…</option>
-            {allPlayers.map(p=><option key={p} value={p}>{p}</option>)}
-          </select>
-          <button disabled={!user} onClick={()=>setUserSet(true)}
-            style={{padding:"9px 28px",background:"#3b82f6",border:"none",borderRadius:7,color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",opacity:user?1:.4}}>
-            Let's Go 🎾
-          </button>
-        </div>
-      ) : (
-        <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:32,height:32,borderRadius:"50%",background:"#1d4ed8",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:"#fff",fontSize:14}}>{user[0]}</div>
-          <span style={{fontWeight:700,color:"#93c5fd"}}>{user}</span>
-          <span style={{fontSize:12,color:"#64748b",marginLeft:"auto"}}>🪙 {myPoints} pts remaining</span>
-          <button onClick={()=>setUserSet(false)} style={{background:"none",border:"none",color:"#64748b",fontSize:11,cursor:"pointer"}}>Switch</button>
-        </div>
-      )}
+      {/* Name picker — always visible at top */}
+      <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <select value={user} onChange={e=>{setUser(e.target.value);setUserSet(true);}}
+          style={{flex:1,minWidth:160,padding:"8px 10px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:user?"#e2e8f0":"#64748b",fontSize:13,outline:"none"}}>
+          <option value="">Select your name to vote & bet…</option>
+          {allPlayers.map(p=><option key={p} value={p}>{p}</option>)}
+        </select>
+        {user&&<div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{width:30,height:30,borderRadius:"50%",background:"#1d4ed8",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:"#fff",fontSize:13}}>{user[0]}</div>
+          <span style={{fontWeight:700,color:"#93c5fd",fontSize:13}}>{user}</span>
+          {section==="bets"&&<span style={{fontSize:12,color:"#f59e0b",marginLeft:4}}>🪙 {myPoints} pts</span>}
+        </div>}
+      </div>
 
       {/* Section tabs */}
       <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
