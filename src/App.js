@@ -685,12 +685,12 @@ function PollsTab({data, upd, allPlayers}) {
   }
 
   async function votePoll(matchId, side) {
-    if (!user) return;
+    if (!userSet || !user) { alert("Please select your name first to vote!"); return; }
     await upd(d=>({...d, polls:{...d.polls, [matchId]:{...(d.polls[matchId]||{}), [user]:side}}}));
   }
 
   async function voteTournament(type, name) {
-    if (!user) return;
+    if (!userSet || !user) { alert("Please select your name first to vote!"); return; }
     await upd(d=>({...d, tournPoll:{...d.tournPoll, [type]:{...(d.tournPoll[type]||{}), [user]:name}}}));
   }
 
@@ -804,11 +804,11 @@ function PollsTab({data, upd, allPlayers}) {
               <div key={m.id} style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:"16px",marginBottom:12}}>
                 <div style={{fontSize:12,color:"#64748b",marginBottom:10}}>{m.date}{m.time?` · ${m.time}`:""}</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:12,marginBottom:14}}>
-                  <button onClick={()=>votePoll(m.id,m.a)} style={{padding:"10px",background:myVote===m.a?"#1d4ed8":"#111827",border:`2px solid ${myVote===m.a?"#3b82f6":"#334155"}`,borderRadius:8,color:myVote===m.a?"#fff":"#cbd5e1",fontWeight:700,fontSize:13,cursor:userSet?"pointer":"not-allowed",textAlign:"center"}}>
+                  <button onClick={()=>votePoll(m.id,m.a)} style={{padding:"10px",background:myVote===m.a?"#1d4ed8":"#111827",border:`2px solid ${myVote===m.a?"#3b82f6":"#334155"}`,borderRadius:8,color:myVote===m.a?"#fff":"#cbd5e1",fontWeight:700,fontSize:13,cursor:"pointer",textAlign:"center"}}>
                     {m.a}
                   </button>
                   <div style={{color:"#475569",fontWeight:700,fontSize:12}}>VS</div>
-                  <button onClick={()=>votePoll(m.id,m.b)} style={{padding:"10px",background:myVote===m.b?"#1d4ed8":"#111827",border:`2px solid ${myVote===m.b?"#3b82f6":"#334155"}`,borderRadius:8,color:myVote===m.b?"#fff":"#cbd5e1",fontWeight:700,fontSize:13,cursor:userSet?"pointer":"not-allowed",textAlign:"center"}}>
+                  <button onClick={()=>votePoll(m.id,m.b)} style={{padding:"10px",background:myVote===m.b?"#1d4ed8":"#111827",border:`2px solid ${myVote===m.b?"#3b82f6":"#334155"}`,borderRadius:8,color:myVote===m.b?"#fff":"#cbd5e1",fontWeight:700,fontSize:13,cursor:"pointer",textAlign:"center"}}>
                     {m.b}
                   </button>
                 </div>
@@ -846,7 +846,7 @@ function PollsTab({data, upd, allPlayers}) {
                     const pct = getTournPct(type,p);
                     const voted = myVote===p;
                     return (
-                      <button key={p} onClick={()=>voteTournament(type,p)} style={{padding:"12px 10px",background:voted?"#1d4ed8":"#111827",border:`2px solid ${voted?"#3b82f6":"#334155"}`,borderRadius:10,color:voted?"#fff":"#cbd5e1",fontWeight:700,fontSize:13,cursor:userSet?"pointer":"not-allowed",textAlign:"center"}}>
+                      <button key={p} onClick={()=>voteTournament(type,p)} style={{padding:"12px 10px",background:voted?"#1d4ed8":"#111827",border:`2px solid ${voted?"#3b82f6":"#334155"}`,borderRadius:10,color:voted?"#fff":"#cbd5e1",fontWeight:700,fontSize:13,cursor:"pointer",textAlign:"center"}}>
                         <div style={{marginBottom:6}}>{p}</div>
                         {total>0&&(
                           <div>
