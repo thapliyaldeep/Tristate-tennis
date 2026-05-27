@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 
 const FB_URL = "https://tristate-tennis-default-rtdb.firebaseio.com/state.json";
 
@@ -35,6 +35,7 @@ function futureDates() {
   return ALL_DATES.filter(d=>{ const [m,dy]=d.split("/").map(Number); return new Date(2026,m-1,dy)>=today; });
 }
 
+// ─── Groups ──────────────────────────────────────────────────────────────────
 const GROUPS = {
   doubles: {
     A: ["Dhar/Vineet","Akash/Micky","Bobby/Satendra","Shailesh/Uzair"],
@@ -59,101 +60,11 @@ const DEFAULT = {
     "Sanjay/Ravi":   {"5/16":"5pm avail","5/17":"Anytime","5/20":"6pm avail","5/21":"6pm avail"},
   },
   sAvail:   {"Dhar":{"5/15":"5pm+","5/16":"8-10am"},"Viraj":{"5/15":"5pm+"}},
-  dMatches: [], sMatches: [], did:1, sid:1,
+  dMatches: [],
+  sMatches: [],
+  did:1, sid:1,
 };
 
-// ─── Tennis scoring logic ─────────────────────────────────────────────────────
-const PTS = [0,15,30,40];
-
-function newLive() {
-  return {
-    sets: [],           // [{a:6,b:4}, ...]
-    games: {a:0,b:0},  // current set games
-    points: {a:0,b:0}, // 0-3, with deuce/ad logic
-    deuce: false,
-    adv: null,          // "a" or "b" or null
-    serving: "a",       // who is serving
-  };
-}
-
-// Returns updated live state after a point won by "a" or "b"
-function addPoint(live, who) {
-  let l = JSON.parse(JSON.stringify(live));
-  const opp = who==="a"?"b":"a";
-
-  // Deuce/advantage logic
-  if (l.deuce) {
-    if (l.adv===who) {
-      // win the game
-      l = winGame(l, who);
-    } else if (l.adv===opp) {
-      l.adv = null; // back to deuce
-    } else {
-      l.adv = who; // advantage
-    }
-    return l;
-  }
-
-  l.points[who]++;
-  // Check for deuce (both at 40 = index 3)
-  if (l.points.a===3 && l.points.b===3) {
-    l.deuce = true;
-    l.points = {a:3,b:3};
-    return l;
-  }
-  // Check for game win
-  if (l.points[who]===4) {
-    l = winGame(l, who);
-  }
-  return l;
-}
-
-function winGame(live, who) {
-  let l = JSON.parse(JSON.stringify(live));
-  const opp = who==="a"?"b":"a";
-  l.points = {a:0,b:0};
-  l.deuce = false;
-  l.adv = null;
-  l.games[who]++;
-  l.serving = l.serving==="a"?"b":"a"; // switch serve after each game
-
-  // Check set win: 6 games, must lead by 2, or tiebreak at 6-6
-  const gw = l.games[who], go = l.games[opp];
-  const setWon = (gw>=6 && gw-go>=2) || gw===7;
-  if (setWon) {
-    l.sets.push({a:l.games.a, b:l.games.b});
-    l.games = {a:0,b:0};
-  }
-  return l;
-}
-
-function setsWon(live) {
-  if (!live) return {a:0,b:0};
-  return live.sets.reduce((acc,s)=>{
-    s.a>s.b ? acc.a++ : acc.b++;
-    return acc;
-  },{a:0,b:0});
-}
-
-function matchOver(live) {
-  if (!live) return false;
-  const sw = setsWon(live);
-  return sw.a===2 || sw.b===2;
-}
-
-function liveToScore(live, nameA, nameB) {
-  // Convert live state to score string format "6-4 6-3"
-  const sa = live.sets.map(s=>`${s.a}-${s.b}`).join(" ");
-  const sb = live.sets.map(s=>`${s.b}-${s.a}`).join(" ");
-  return {sa, sb};
-}
-
-function displayPoints(live, side) {
-  if (live.deuce) return live.adv===side ? "Ad" : live.adv ? "" : "40";
-  return PTS[live.points[side]].toString();
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 function calcWins(score) {
   if (!score) return null;
   let w=0,l=0;
@@ -164,6 +75,7 @@ function calcWins(score) {
   return {w,l};
 }
 
+// ─── Points table per group (2pts per win) ───────────────────────────────────
 function calcGroupStandings(matches, groupMembers) {
   const st={};
   groupMembers.forEach(p=>{ st[p]={mp:0,w:0,l:0,sw:0,sl:0,pts:0}; });
@@ -177,7 +89,8 @@ function calcGroupStandings(matches, groupMembers) {
     if (wa.w>wb.w) { st[m.a].w++; st[m.a].pts+=2; st[m.b].l++; }
     else           { st[m.b].w++; st[m.b].pts+=2; st[m.a].l++; }
   }
-  return Object.entries(st).map(([n,v])=>({n,...v})).sort((a,b)=>b.pts-a.pts||b.w-a.w||(b.sw-b.sl)-(a.sw-a.sl));
+  return Object.entries(st).map(([n,v])=>({n,...v}))
+    .sort((a,b)=>b.pts-a.pts||b.w-a.w||(b.sw-b.sl)-(a.sw-a.sl));
 }
 
 function isEditable(m) {
@@ -207,159 +120,12 @@ function Modal({title,onClose,children}) {
   );
 }
 
-// ─── Live Score View ─────────────────────────────────────────────────────────
-function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose}) {
-  const live = m.live || newLive();
-  const sw = setsWon(live);
-  const over = matchOver(live);
-  const nameA = m.a, nameB = m.b;
-
-  const bigNum = {fontSize:56,fontWeight:900,lineHeight:1,color:"#fff"};
-  const smallNum = {fontSize:22,fontWeight:700,color:"#64748b"};
-  const setBox = (s,i) => (
-    <div key={i} style={{textAlign:"center",background:"#0f172a",borderRadius:6,padding:"4px 10px",minWidth:48}}>
-      <div style={{fontSize:13,fontWeight:700,color:s.a>s.b?"#34d399":"#94a3b8"}}>{s.a}</div>
-      <div style={{fontSize:10,color:"#334155",margin:"1px 0"}}>—</div>
-      <div style={{fontSize:13,fontWeight:700,color:s.b>s.a?"#34d399":"#94a3b8"}}>{s.b}</div>
-    </div>
-  );
-
-  return (
-    <div style={{position:"fixed",inset:0,background:"#07090f",zIndex:1000,display:"flex",flexDirection:"column",overflowY:"auto"}}>
-      {/* Header */}
-      <div style={{background:"#0a1020",borderBottom:"1px solid #1e293b",padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <div style={{width:8,height:8,borderRadius:"50%",background:"#ef4444",animation:"pulse 1s infinite"}}/>
-          <span style={{color:"#ef4444",fontWeight:700,fontSize:13,letterSpacing:1}}>LIVE</span>
-          <span style={{color:"#64748b",fontSize:12,marginLeft:4}}>{m.date}{m.time?` · ${m.time}`:""}</span>
-        </div>
-        <button onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:20,cursor:"pointer"}}>×</button>
-      </div>
-
-      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px 16px",gap:24,maxWidth:500,margin:"0 auto",width:"100%"}}>
-
-        {/* Sets history */}
-        {live.sets.length>0&&(
-          <div style={{display:"flex",gap:8}}>
-            {live.sets.map((s,i)=>setBox(s,i))}
-          </div>
-        )}
-
-        {/* Main scoreboard */}
-        <div style={{width:"100%",background:"#0e1320",borderRadius:16,border:"1px solid #1e293b",overflow:"hidden"}}>
-          {/* Player A */}
-          <div style={{padding:"20px 24px",borderBottom:"1px solid #1e293b",display:"flex",justifyContent:"space-between",alignItems:"center",background:sw.a>sw.b&&over?"#064e3b22":"transparent"}}>
-            <div>
-              <div style={{fontWeight:800,fontSize:18,color:sw.a>sw.b&&over?"#34d399":"#e2e8f0"}}>{nameA}</div>
-              <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{live.serving==="a"?"🎾 Serving":""}</div>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:20}}>
-              <div style={smallNum}>{sw.a}</div>
-              <div style={{width:1,height:40,background:"#1e293b"}}/>
-              {!over
-                ? <div style={{...bigNum,color:live.adv==="a"?"#34d399":live.adv==="b"?"#475569":"#fff"}}>{live.deuce&&live.adv==="a"?"Ad":live.deuce&&!live.adv?"40":live.deuce?"":displayPoints(live,"a")}</div>
-                : <div style={{fontSize:28,fontWeight:900,color:sw.a>sw.b?"#34d399":"#64748b"}}>{sw.a>sw.b?"🏆":""}</div>
-              }
-            </div>
-          </div>
-
-          {/* Games */}
-          {!over&&(
-            <div style={{padding:"10px 24px",background:"#0a1020",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div style={{fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:1}}>Games</div>
-              <div style={{display:"flex",gap:4}}>
-                <span style={{fontWeight:800,fontSize:20,color:"#93c5fd"}}>{live.games.a}</span>
-                <span style={{color:"#334155",fontSize:20}}>—</span>
-                <span style={{fontWeight:800,fontSize:20,color:"#93c5fd"}}>{live.games.b}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Player B */}
-          <div style={{padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"center",background:sw.b>sw.a&&over?"#064e3b22":"transparent"}}>
-            <div>
-              <div style={{fontWeight:800,fontSize:18,color:sw.b>sw.a&&over?"#34d399":"#e2e8f0"}}>{nameB}</div>
-              <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{live.serving==="b"?"🎾 Serving":""}</div>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:20}}>
-              <div style={smallNum}>{sw.b}</div>
-              <div style={{width:1,height:40,background:"#1e293b"}}/>
-              {!over
-                ? <div style={{...bigNum,color:live.adv==="b"?"#34d399":live.adv==="a"?"#475569":"#fff"}}>{live.deuce&&live.adv==="b"?"Ad":live.deuce&&!live.adv?"40":live.deuce?"":displayPoints(live,"b")}</div>
-                : <div style={{fontSize:28,fontWeight:900,color:sw.b>sw.a?"#34d399":"#64748b"}}>{sw.b>sw.a?"🏆":""}</div>
-              }
-            </div>
-          </div>
-        </div>
-
-        {/* Deuce label */}
-        {live.deuce&&!live.adv&&!over&&(
-          <div style={{background:"#1e3a5f",color:"#93c5fd",fontWeight:700,fontSize:14,padding:"6px 20px",borderRadius:20,letterSpacing:2}}>DEUCE</div>
-        )}
-
-        {/* Score keeper controls */}
-        {isKeeper && !over && (
-          <div style={{width:"100%"}}>
-            <div style={{fontSize:11,color:"#64748b",textAlign:"center",marginBottom:12,textTransform:"uppercase",letterSpacing:1}}>Award Point To</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-              <button onClick={()=>onPoint("a")} style={{padding:"18px",background:"linear-gradient(135deg,#1d4ed8,#2563eb)",border:"none",borderRadius:12,color:"#fff",fontWeight:800,fontSize:15,cursor:"pointer"}}>
-                {nameA}
-              </button>
-              <button onClick={()=>onPoint("b")} style={{padding:"18px",background:"linear-gradient(135deg,#1d4ed8,#2563eb)",border:"none",borderRadius:12,color:"#fff",fontWeight:800,fontSize:15,cursor:"pointer"}}>
-                {nameB}
-              </button>
-            </div>
-            <div style={{display:"flex",gap:10,marginTop:12,justifyContent:"center"}}>
-              <button onClick={onUndo} style={{...sbtn,fontSize:12}}>↩ Undo</button>
-            </div>
-          </div>
-        )}
-
-        {/* Match over — keeper ends it */}
-        {isKeeper && over && (
-          <div style={{textAlign:"center"}}>
-            <div style={{color:"#34d399",fontWeight:700,fontSize:18,marginBottom:16}}>
-              🏆 {sw.a>sw.b?nameA:nameB} wins!
-            </div>
-            <button onClick={onEndMatch} style={{...pbtn,fontSize:15,padding:"12px 32px",background:"linear-gradient(135deg,#059669,#10b981)"}}>
-              ✓ Save & End Match
-            </button>
-          </div>
-        )}
-
-        {/* Viewer — just watching */}
-        {!isKeeper && over && (
-          <div style={{textAlign:"center",color:"#34d399",fontWeight:700,fontSize:18}}>
-            🏆 {sw.a>sw.b?nameA:nameB} wins!
-          </div>
-        )}
-
-        {!isKeeper && (
-          <div style={{fontSize:11,color:"#64748b",textAlign:"center"}}>👁 Viewing live — score updates every 5 seconds</div>
-        )}
-      </div>
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}`}</style>
-    </div>
-  );
-}
-
-// ─── Match Card ───────────────────────────────────────────────────────────────
-function MatchCard({m, onScore, onDel, onGoLive}) {
+function MatchCard({m,onScore,onDel}) {
   const wa=m.done?calcWins(m.sa):null, wb=m.done?calcWins(m.sb):null;
   const winner=wa&&wb?(wa.w>wb.w?m.a:m.b):null;
   const locked=m.done&&!isEditable(m);
-  const isLive=!!m.live&&!m.done;
-  const sw=m.live?setsWon(m.live):{a:0,b:0};
-
   return (
-    <div style={{background:"#111827",border:`1px solid ${isLive?"#ef444466":locked?"#2d1f00":m.done?"#14532d55":"#334155"}`,borderRadius:10,padding:"14px 16px",marginBottom:10,display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
-      {isLive&&(
-        <div style={{width:"100%",marginBottom:4,display:"flex",alignItems:"center",gap:6}}>
-          <div style={{width:7,height:7,borderRadius:"50%",background:"#ef4444",animation:"pulse 1s infinite"}}/>
-          <span style={{color:"#ef4444",fontSize:11,fontWeight:700,letterSpacing:1}}>LIVE</span>
-          <span style={{color:"#64748b",fontSize:11,marginLeft:4}}>{sw.a} — {sw.b} sets</span>
-        </div>
-      )}
+    <div style={{background:"#111827",border:`1px solid ${locked?"#2d1f00":m.done?"#14532d55":"#334155"}`,borderRadius:10,padding:"14px 16px",marginBottom:10,display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
       <div style={{flex:1,minWidth:180,display:"flex",alignItems:"center",gap:12}}>
         <div style={{flex:1}}>
           <div style={{fontWeight:700,fontSize:14,color:winner===m.a?"#34d399":"#cbd5e1"}}>{m.a}</div>
@@ -376,8 +142,7 @@ function MatchCard({m, onScore, onDel, onGoLive}) {
         {m.done&&winner&&<div style={{fontSize:12,color:"#10b981",marginTop:3}}>🏆 {winner}</div>}
         {locked&&<div style={{fontSize:11,color:"#f59e0b",marginTop:3}}>🔒 Locked after 24h</div>}
         <div style={{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}}>
-          {!m.done&&<button onClick={onGoLive} style={{padding:"6px 12px",background:isLive?"#2d1515":"#1a2744",border:`1px solid ${isLive?"#ef444466":"#334155"}`,borderRadius:6,color:isLive?"#ef4444":"#93c5fd",fontSize:12,cursor:"pointer"}}>{isLive?"📡 Watch Live":"📡 Go Live"}</button>}
-          {!locked&&!isLive&&<button onClick={onScore} style={{padding:"6px 12px",background:"#1e3a5f",border:"none",borderRadius:6,color:"#93c5fd",fontSize:12,cursor:"pointer"}}>{m.done?"✏️ Edit":"📝 Score"}</button>}
+          {!locked&&<button onClick={onScore} style={{padding:"6px 12px",background:"#1e3a5f",border:"none",borderRadius:6,color:"#93c5fd",fontSize:12,cursor:"pointer"}}>{m.done?"✏️ Edit":"📝 Score"}</button>}
           <button onClick={onDel} style={{padding:"6px 10px",background:"#2d1515",border:"none",borderRadius:6,color:"#f87171",fontSize:12,cursor:"pointer"}}>🗑</button>
         </div>
       </div>
@@ -385,7 +150,7 @@ function MatchCard({m, onScore, onDel, onGoLive}) {
   );
 }
 
-// ─── Group Table ─────────────────────────────────────────────────────────────
+// ─── Group Table Component ────────────────────────────────────────────────────
 function GroupTable({label,standings}) {
   return (
     <div style={{marginBottom:24}}>
@@ -404,13 +169,13 @@ function GroupTable({label,standings}) {
           </thead>
           <tbody>
             {standings.map((s,i)=>{
-              const q=i<2;
+              const qualifies = i < 2;
               return (
-                <tr key={s.n} style={{background:i%2===0?"#111827":"#0f172a",borderLeft:q?"3px solid #10b981":"3px solid transparent"}}>
+                <tr key={s.n} style={{background:i%2===0?"#111827":"#0f172a",borderLeft:qualifies?"3px solid #10b981":"3px solid transparent"}}>
                   <td style={{padding:"11px 12px",borderBottom:"1px solid #1e293b"}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      {q&&<span style={{fontSize:10,background:"#064e3b",color:"#10b981",padding:"2px 6px",borderRadius:4,fontWeight:700}}>Q</span>}
-                      <span style={{fontWeight:700,color:q?"#34d399":"#cbd5e1"}}>{s.n}</span>
+                      {qualifies && <span style={{fontSize:10,background:"#064e3b",color:"#10b981",padding:"2px 6px",borderRadius:4,fontWeight:700,whiteSpace:"nowrap"}}>Q</span>}
+                      <span style={{fontWeight:700,color:qualifies?"#34d399":"#cbd5e1"}}>{s.n}</span>
                     </div>
                   </td>
                   <td style={{padding:"11px 12px",textAlign:"center",color:"#64748b",borderBottom:"1px solid #1e293b"}}>{s.mp}</td>
@@ -427,29 +192,61 @@ function GroupTable({label,standings}) {
   );
 }
 
-function KnockoutBracket({standA,standB}) {
-  const sf1a=standA[0]?.n||"1st Group A", sf1b=standB[1]?.n||"2nd Group B";
-  const sf2a=standB[0]?.n||"1st Group B", sf2b=standA[1]?.n||"2nd Group A";
-  const box=(filled,label)=>(<div style={{background:filled?"#0a1e3a":"#111827",border:`1px solid ${filled?"#3b82f6":"#334155"}`,borderRadius:8,padding:"10px 14px",color:filled?"#93c5fd":"#475569",fontWeight:700,fontSize:13,minWidth:140,textAlign:"center"}}>{label}</div>);
-  const vs=<div style={{color:"#475569",fontSize:11,fontWeight:700,textAlign:"center",margin:"4px 0"}}>vs</div>;
+// ─── Knockout Bracket ─────────────────────────────────────────────────────────
+function KnockoutBracket({standA, standB}) {
+  const sf1a = standA[0]?.n || "1st Group A";
+  const sf1b = standB[1]?.n || "2nd Group B";
+  const sf2a = standB[0]?.n || "1st Group B";
+  const sf2b = standA[1]?.n || "2nd Group A";
+
+  const boxStyle = (filled) => ({
+    background: filled?"#0a1e3a":"#111827",
+    border:`1px solid ${filled?"#3b82f6":"#334155"}`,
+    borderRadius:8, padding:"10px 14px",
+    color: filled?"#93c5fd":"#475569",
+    fontWeight:700, fontSize:13, minWidth:140, textAlign:"center",
+  });
+  const vsStyle = {color:"#475569",fontSize:11,fontWeight:700,textAlign:"center",margin:"4px 0"};
+
   return (
     <div style={{marginTop:8}}>
       <div style={{fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:16}}>Knockout Stage</div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:0,overflowX:"auto"}}>
+
+        {/* SF1 */}
         <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:160}}>
           <div style={{fontSize:11,color:"#f59e0b",fontWeight:700,marginBottom:6,letterSpacing:1}}>SEMI FINAL 1</div>
-          {box(!!standA[0],sf1a)}{vs}{box(!!standB[1],sf1b)}
+          <div style={boxStyle(!!standA[0])}>{sf1a}</div>
+          <div style={vsStyle}>vs</div>
+          <div style={boxStyle(!!standB[1])}>{sf1b}</div>
         </div>
-        <div style={{width:60,height:1,background:"#334155",marginTop:28}}/>
+
+        {/* Arrow SF1 → Final */}
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:60}}>
+          <div style={{height:1,width:"100%",background:"#334155",marginTop:28}}/>
+        </div>
+
+        {/* Final */}
         <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:160}}>
           <div style={{fontSize:11,color:"#FFD700",fontWeight:800,marginBottom:6,letterSpacing:1}}>🏆 FINAL</div>
-          {box(false,"Winner SF1")}{vs}{box(false,"Winner SF2")}
+          <div style={boxStyle(false)}>Winner SF1</div>
+          <div style={vsStyle}>vs</div>
+          <div style={boxStyle(false)}>Winner SF2</div>
         </div>
-        <div style={{width:60,height:1,background:"#334155",marginTop:28}}/>
+
+        {/* Arrow SF2 → Final */}
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:60}}>
+          <div style={{height:1,width:"100%",background:"#334155",marginTop:28}}/>
+        </div>
+
+        {/* SF2 */}
         <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:160}}>
           <div style={{fontSize:11,color:"#f59e0b",fontWeight:700,marginBottom:6,letterSpacing:1}}>SEMI FINAL 2</div>
-          {box(!!standB[0],sf2a)}{vs}{box(!!standA[1],sf2b)}
+          <div style={boxStyle(!!standB[0])}>{sf2a}</div>
+          <div style={vsStyle}>vs</div>
+          <div style={boxStyle(!!standA[1])}>{sf2b}</div>
         </div>
+
       </div>
       <div style={{marginTop:12,fontSize:11,color:"#64748b",textAlign:"center"}}>1st Group A vs 2nd Group B · 1st Group B vs 2nd Group A</div>
     </div>
@@ -458,31 +255,22 @@ function KnockoutBracket({standA,standB}) {
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [data,      setData]      = useState(null);
-  const [status,    setStatus]    = useState("loading");
-  const [tab,       setTab]       = useState("schedule");
-  const [lg,        setLg]        = useState("doubles");
-  const [modal,     setModal]     = useState(null);
-  const [mf,        setMf]        = useState({});
-  const [liveMatch, setLiveMatch] = useState(null); // {matchId, type, isKeeper}
+  const [data,   setData]   = useState(null);
+  const [status, setStatus] = useState("loading");
+  const [tab,    setTab]    = useState("schedule");
+  const [lg,     setLg]     = useState("doubles");
+  const [modal,  setModal]  = useState(null);
+  const [mf,     setMf]     = useState({});
 
   const FUTURE      = futureDates();
   const defaultDate = FUTURE[0]||ALL_DATES[0];
 
-  const load = useCallback(async (init=false) => {
-    const r = await dbLoad();
-    if (r) { setData(r); if(init) setStatus("ok"); }
-    else if (init) { await dbSave(DEFAULT); setData(DEFAULT); setStatus("ok"); }
-  },[]);
-
-  useEffect(()=>{ load(true); },[load]);
-
-  // Poll every 5s when watching live
   useEffect(()=>{
-    if (!liveMatch) return;
-    const t = setInterval(()=>load(false), 5000);
-    return ()=>clearInterval(t);
-  },[liveMatch,load]);
+    dbLoad().then(r=>{
+      if(r){ setData(r); setStatus("ok"); }
+      else { dbSave(DEFAULT).then(()=>{ setData(DEFAULT); setStatus("ok"); }); }
+    }).catch(()=>setStatus("error"));
+  },[]);
 
   async function upd(fn) {
     const nd=fn(data); setData(nd); setStatus("saving");
@@ -497,59 +285,13 @@ export default function App() {
   const avail   = isD?data.dAvail  :data.sAvail;
   const matches = isD?data.dMatches:data.sMatches;
   const groups  = isD?GROUPS.doubles:GROUPS.singles;
-  const standA  = calcGroupStandings(matches,groups.A);
-  const standB  = calcGroupStandings(matches,groups.B);
+
+  const standA  = calcGroupStandings(matches, groups.A);
+  const standB  = calcGroupStandings(matches, groups.B);
+
   const pending = matches.filter(m=>!m.done);
   const complete= matches.filter(m=> m.done);
 
-  // ── Live score handlers ──
-  function openLive(m, type, keeper) {
-    setLiveMatch({matchId:m.id, type, isKeeper:keeper});
-  }
-
-  function getCurrentLiveMatch() {
-    if (!liveMatch) return null;
-    const arr = liveMatch.type==="doubles"?data.dMatches:data.sMatches;
-    return arr.find(m=>m.id===liveMatch.matchId)||null;
-  }
-
-  async function handlePoint(side) {
-    const m = getCurrentLiveMatch(); if(!m) return;
-    const live = addPoint(m.live||newLive(), side);
-    const type = liveMatch.type;
-    await upd(d=>{
-      const key=type==="doubles"?"dMatches":"sMatches";
-      return {...d,[key]:d[key].map(x=>x.id===m.id?{...x,live}:x)};
-    });
-  }
-
-  async function handleUndo() {
-    // Simple undo: reset live score (restart current game)
-    const m = getCurrentLiveMatch(); if(!m) return;
-    const live = m.live||newLive();
-    // Just reset current game points
-    const newL = {...live, points:{a:0,b:0}, deuce:false, adv:null};
-    const type = liveMatch.type;
-    await upd(d=>{
-      const key=type==="doubles"?"dMatches":"sMatches";
-      return {...d,[key]:d[key].map(x=>x.id===m.id?{...x,live:newL}:x)};
-    });
-  }
-
-  async function handleEndMatch() {
-    const m = getCurrentLiveMatch(); if(!m) return;
-    const live = m.live||newLive();
-    const {sa,sb} = liveToScore(live, m.a, m.b);
-    const type = liveMatch.type;
-    const stamp = Date.now();
-    await upd(d=>{
-      const key=type==="doubles"?"dMatches":"sMatches";
-      return {...d,[key]:d[key].map(x=>x.id===m.id?{...x,sa,sb,done:true,completedAt:stamp,live:null}:x)};
-    });
-    setLiveMatch(null);
-  }
-
-  // ── Match handlers ──
   async function addMatch() {
     await upd(d=>{
       const m={id:isD?`d${d.did}`:`s${d.sid}`,a:mf.a,b:mf.b,date:mf.date||defaultDate,time:mf.time||"",sa:"",sb:"",done:false};
@@ -587,24 +329,9 @@ export default function App() {
   const statusColor={ok:"#10b981",saving:"#f59e0b",error:"#ef4444"}[status]||"#64748b";
   const statusText ={ok:"✓ Saved",saving:"💾 Saving…",error:"⚠ Save failed"}[status];
 
-  // Show live score overlay
-  const liveMatchData = liveMatch ? getCurrentLiveMatch() : null;
-  if (liveMatch && liveMatchData) {
-    return (
-      <LiveScoreView
-        m={liveMatchData}
-        isKeeper={liveMatch.isKeeper}
-        onPoint={handlePoint}
-        onUndo={handleUndo}
-        onEndMatch={handleEndMatch}
-        onClose={()=>setLiveMatch(null)}
-      />
-    );
-  }
-
   return (
     <div style={{minHeight:"100vh",background:"#0f172a",color:"#e2e8f0",fontFamily:"system-ui,sans-serif"}}>
-      <style>{`*{box-sizing:border-box}select,input{color-scheme:dark}button:disabled{opacity:.4;cursor:not-allowed}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}`}</style>
+      <style>{`*{box-sizing:border-box}select,input{color-scheme:dark}button:disabled{opacity:.4;cursor:not-allowed}`}</style>
 
       {/* Header */}
       <div style={{background:"#0a1020",borderBottom:"1px solid #1e293b",padding:"14px 16px 0"}}>
@@ -628,6 +355,7 @@ export default function App() {
       </div>
 
       <div style={{maxWidth:960,margin:"0 auto",padding:"20px 16px"}}>
+
         {tab!=="manage"&&(
           <div style={{display:"flex",gap:8,marginBottom:20}}>
             {[["doubles","👥 Doubles"],["singles","👤 Singles"]].map(([id,label])=>(
@@ -650,9 +378,8 @@ export default function App() {
                     <div style={{fontSize:11,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>Upcoming Matches</div>
                     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))",gap:8,marginBottom:16}}>
                       {pending.map(m=>(
-                        <div key={m.id} style={{background:m.live?"#1a0a0a":"#0a1e3a",border:`1px solid ${m.live?"#ef444466":"#1e3a6e"}`,borderRadius:8,padding:"10px 12px"}}>
-                          {m.live&&<div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}><div style={{width:6,height:6,borderRadius:"50%",background:"#ef4444",animation:"pulse 1s infinite"}}/><span style={{color:"#ef4444",fontSize:10,fontWeight:700}}>LIVE</span></div>}
-                          <div style={{fontWeight:700,color:m.live?"#fca5a5":"#93c5fd",fontSize:13}}>{m.a}</div>
+                        <div key={m.id} style={{background:"#0a1e3a",border:"1px solid #1e3a6e",borderRadius:8,padding:"10px 12px"}}>
+                          <div style={{fontWeight:700,color:"#93c5fd",fontSize:13}}>{m.a}</div>
                           <div style={{fontSize:11,color:"#64748b"}}>vs {m.b}</div>
                           <div style={{color:"#64748b",fontSize:11,marginTop:5}}>{m.date}{m.time?` · ${m.time}`:""}</div>
                         </div>
@@ -703,14 +430,17 @@ export default function App() {
                       {ALL_DATES.map(d=>{
                         const note=avail[name]?.[d];
                         const booked=note&&/w /i.test(note);
-                        return(
+                        return (
                           <td key={d} style={{padding:"3px 3px",borderBottom:"1px solid #1e293b",verticalAlign:"top"}}>
-                            {note?<div onClick={()=>removeAvail(name,d)} title="Click to remove" style={{background:booked?"#064e3b":"#1e3a5f",border:`1px solid ${booked?"#10b98155":"#3b82f655"}`,borderRadius:5,padding:"3px 5px",color:booked?"#10b981":"#93c5fd",fontSize:10,cursor:"pointer",lineHeight:1.4}}>{note}</div>:<div style={{height:22}}/>}
+                            {note
+                              ?<div onClick={()=>removeAvail(name,d)} title="Click to remove" style={{background:booked?"#064e3b":"#1e3a5f",border:`1px solid ${booked?"#10b98155":"#3b82f655"}`,borderRadius:5,padding:"3px 5px",color:booked?"#10b981":"#93c5fd",fontSize:10,cursor:"pointer",lineHeight:1.4}}>{note}</div>
+                              :<div style={{height:22}}/>
+                            }
                           </td>
                         );
                       })}
                       <td style={{padding:"3px 4px",borderBottom:"1px solid #1e293b",textAlign:"center",position:"sticky",right:0,background:ri%2===0?"#111827":"#0f172a"}}>
-                        <button onClick={()=>{setModal("avail");setMf({name,date:defaultDate,note:""}); }} style={{background:"none",border:"1px solid #334155",borderRadius:5,color:"#64748b",cursor:"pointer",padding:"2px 7px",fontSize:14,lineHeight:1.5}}>+</button>
+                        <button onClick={()=>{setModal("avail");setMf({name,date:defaultDate,note:""});}} style={{background:"none",border:"1px solid #334155",borderRadius:5,color:"#64748b",cursor:"pointer",padding:"2px 7px",fontSize:14,lineHeight:1.5}}>+</button>
                       </td>
                     </tr>
                   ))}
@@ -731,29 +461,14 @@ export default function App() {
             {matches.length===0&&<div style={{textAlign:"center",color:"#64748b",padding:"60px 0"}}>No matches yet.</div>}
             {pending.length>0&&(
               <div style={{marginBottom:24}}>
-                <div style={{fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>Pending</div>
-                {pending.map(m=>(
-                  <MatchCard key={m.id} m={m}
-                    onScore={()=>{setModal("score");setMf({id:m.id,a:m.a,b:m.b,date:m.date,time:m.time,sa:"",sb:""});}}
-                    onDel={()=>delMatch(m.id)}
-                    onGoLive={()=>{
-                      setModal("livemode");
-                      setMf({matchId:m.id,matchType:isD?"doubles":"singles"});
-                    }}
-                  />
-                ))}
+                <div style={{fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>Pending Score Entry</div>
+                {pending.map(m=><MatchCard key={m.id} m={m} onScore={()=>{setModal("score");setMf({id:m.id,a:m.a,b:m.b,date:m.date,time:m.time,sa:"",sb:""}); }} onDel={()=>delMatch(m.id)}/>)}
               </div>
             )}
             {complete.length>0&&(
               <div>
                 <div style={{fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>Completed</div>
-                {complete.map(m=>(
-                  <MatchCard key={m.id} m={m} done
-                    onScore={()=>{setModal("score");setMf({id:m.id,a:m.a,b:m.b,date:m.date,time:m.time,sa:m.sa,sb:m.sb});}}
-                    onDel={()=>delMatch(m.id)}
-                    onGoLive={()=>{}}
-                  />
-                ))}
+                {complete.map(m=><MatchCard key={m.id} m={m} onScore={()=>{setModal("score");setMf({id:m.id,a:m.a,b:m.b,date:m.date,time:m.time,sa:m.sa,sb:m.sb});}} onDel={()=>delMatch(m.id)}/>)}
               </div>
             )}
           </div>
@@ -763,10 +478,13 @@ export default function App() {
         {tab==="leaderboard"&&(
           <div>
             <div style={{fontWeight:700,color:"#fff",marginBottom:20,fontSize:16}}>{isD?"Doubles":"Singles"} Points Table</div>
+
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:24,marginBottom:36}}>
               <GroupTable label="A" standings={standA}/>
               <GroupTable label="B" standings={standB}/>
             </div>
+
+            {/* Knockout bracket */}
             <div style={{background:"#0a1020",border:"1px solid #1e293b",borderRadius:12,padding:"20px 16px"}}>
               <KnockoutBracket standA={standA} standB={standB}/>
             </div>
@@ -848,36 +566,6 @@ export default function App() {
           <div style={{display:"flex",gap:8,marginTop:18}}>
             <button style={pbtn} disabled={!mf.sa||!mf.sb} onClick={saveScore}>Save Score</button>
             <button style={sbtn} onClick={()=>setModal(null)}>Cancel</button>
-          </div>
-        </Modal>
-      )}
-      {modal==="livemode"&&(
-        <Modal title="Start Live Scoring" onClose={()=>setModal(null)}>
-          <div style={{fontSize:13,color:"#94a3b8",marginBottom:16}}>Are you the score keeper or a viewer?</div>
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            <button onClick={()=>{
-              const m=matches.find(x=>x.id===mf.matchId);
-              if(!m) return;
-              // Init live state if not started
-              if(!m.live){
-                upd(d=>{
-                  const key=mf.matchType==="doubles"?"dMatches":"sMatches";
-                  return {...d,[key]:d[key].map(x=>x.id===mf.matchId?{...x,live:newLive()}:x)};
-                });
-              }
-              setModal(null);
-              openLive(m, mf.matchType, true);
-            }} style={{...pbtn,justifyContent:"center",padding:"12px",fontSize:14}}>
-              🎾 I am the Score Keeper
-            </button>
-            <button onClick={()=>{
-              const m=matches.find(x=>x.id===mf.matchId);
-              if(!m) return;
-              setModal(null);
-              openLive(m, mf.matchType, false);
-            }} style={{...sbtn,justifyContent:"center",padding:"12px",fontSize:14,color:"#93c5fd"}}>
-              👁 Watch Live
-            </button>
           </div>
         </Modal>
       )}
