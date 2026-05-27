@@ -59,7 +59,7 @@ const DEFAULT = {
     "Sanjay/Ravi":   {"5/16":"5pm avail","5/17":"Anytime","5/20":"6pm avail","5/21":"6pm avail"},
   },
   sAvail:   {"Dhar":{"5/15":"5pm+","5/16":"8-10am"},"Viraj":{"5/15":"5pm+"}},
-  dMatches: [], sMatches: [], did:1, sid:1, banter: [],
+  dMatches: [], sMatches: [], did:1, sid:1,
 };
 
 // ─── Tennis scoring logic ─────────────────────────────────────────────────────
@@ -456,159 +456,6 @@ function KnockoutBracket({standA,standB}) {
   );
 }
 
-
-// ─── Banter Tab ──────────────────────────────────────────────────────────────
-const EMOJI_REACTIONS = ["🔥","😂","👏","🎾","💪","😮","❤️","🏆"];
-const ALL_PLAYERS = [
-  "Nitin","Ashish","Jai","Deep","Tarun","Sumit","Bobby","Satendra",
-  "Akash","Micky","Dhar","Vineet","Sanjay","Ravi","Shailesh","Uzair",
-  "Pratyush","Viraj","Tushar"
-];
-
-function BanterTab({data, upd}) {
-  const [author, setAuthor] = useState("");
-  const [text, setText] = useState("");
-  const [showEmoji, setShowEmoji] = useState(null); // message id
-  const [authSet, setAuthSet] = useState(false);
-  const banter = data.banter || [];
-
-  function formatTime(ts) {
-    const d = new Date(ts);
-    return d.toLocaleDateString("en-US",{month:"short",day:"numeric"}) + " · " + d.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});
-  }
-
-  function highlightAt(txt) {
-    // Highlight @mentions
-    const parts = txt.split(/(@\w+)/g);
-    return parts.map((p,i) =>
-      p.startsWith("@")
-        ? <span key={i} style={{color:"#3b82f6",fontWeight:700}}>{p}</span>
-        : p
-    );
-  }
-
-  async function postMessage() {
-    if (!author.trim() || !text.trim()) return;
-    const msg = {
-      id: Date.now().toString(),
-      author: author.trim(),
-      text: text.trim(),
-      ts: Date.now(),
-      reactions: {},
-    };
-    await upd(d => ({...d, banter: [...(d.banter||[]), msg]}));
-    setText("");
-  }
-
-  async function addReaction(msgId, emoji) {
-    await upd(d => ({
-      ...d,
-      banter: (d.banter||[]).map(m => {
-        if (m.id !== msgId) return m;
-        const reactions = {...(m.reactions||{})};
-        reactions[emoji] = (reactions[emoji]||0) + 1;
-        return {...m, reactions};
-      })
-    }));
-    setShowEmoji(null);
-  }
-
-  return (
-    <div style={{maxWidth:640,margin:"0 auto"}}>
-      {/* Name selector */}
-      {!authSet ? (
-        <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:"24px",marginBottom:20,textAlign:"center"}}>
-          <div style={{fontSize:16,fontWeight:700,color:"#fff",marginBottom:4}}>Who are you?</div>
-          <div style={{fontSize:12,color:"#64748b",marginBottom:16}}>Pick your name to join the banter</div>
-          <select style={{...{width:"100%",padding:"9px 11px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"},marginBottom:12}}
-            value={author} onChange={e=>setAuthor(e.target.value)}>
-            <option value="">Select your name…</option>
-            {ALL_PLAYERS.map(p=><option key={p} value={p}>{p}</option>)}
-          </select>
-          <button
-            disabled={!author}
-            onClick={()=>setAuthSet(true)}
-            style={{padding:"9px 28px",background:"#3b82f6",border:"none",borderRadius:7,color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",opacity:author?1:.4}}>
-            Let's Go 🎾
-          </button>
-        </div>
-      ) : (
-        <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:"14px 16px",marginBottom:20}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-            <div style={{width:32,height:32,borderRadius:"50%",background:"#1d4ed8",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:"#fff",fontSize:14}}>
-              {author[0]}
-            </div>
-            <span style={{fontWeight:700,color:"#93c5fd"}}>{author}</span>
-            <button onClick={()=>setAuthSet(false)} style={{background:"none",border:"none",color:"#64748b",fontSize:11,cursor:"pointer",marginLeft:"auto"}}>Switch</button>
-          </div>
-          <textarea
-            value={text}
-            onChange={e=>setText(e.target.value)}
-            onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();postMessage();}}}
-            placeholder={"Talk trash, celebrate, @mention someone…"}
-            style={{width:"100%",background:"#0f172a",border:"1px solid #334155",borderRadius:8,padding:"10px 12px",color:"#e2e8f0",fontSize:13,outline:"none",resize:"none",boxSizing:"border-box",minHeight:72,fontFamily:"system-ui,sans-serif"}}
-          />
-          <div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}>
-            <button
-              disabled={!text.trim()}
-              onClick={postMessage}
-              style={{padding:"8px 20px",background:"#3b82f6",border:"none",borderRadius:7,color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",opacity:text.trim()?1:.4}}>
-              Post 🎾
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Messages */}
-      {banter.length===0 && (
-        <div style={{textAlign:"center",color:"#64748b",padding:"60px 0",fontSize:14}}>
-          No banter yet — be the first to start! 🎾
-        </div>
-      )}
-      {[...banter].reverse().map(msg=>(
-        <div key={msg.id} style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:"14px 16px",marginBottom:12,position:"relative"}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <div style={{width:30,height:30,borderRadius:"50%",background:"#1d4ed8",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:"#fff",fontSize:13,flexShrink:0}}>
-              {msg.author[0]}
-            </div>
-            <span style={{fontWeight:700,color:"#93c5fd",fontSize:14}}>{msg.author}</span>
-            <span style={{fontSize:11,color:"#475569",marginLeft:"auto"}}>{formatTime(msg.ts)}</span>
-          </div>
-          <div style={{fontSize:14,color:"#e2e8f0",lineHeight:1.6,marginBottom:10}}>
-            {highlightAt(msg.text)}
-          </div>
-          {/* Reactions display */}
-          <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center"}}>
-            {Object.entries(msg.reactions||{}).filter(([,c])=>c>0).map(([emoji,count])=>(
-              <button key={emoji} onClick={()=>addReaction(msg.id,emoji)}
-                style={{background:"#1e293b",border:"1px solid #334155",borderRadius:20,padding:"3px 10px",cursor:"pointer",fontSize:13,color:"#e2e8f0",display:"flex",alignItems:"center",gap:4}}>
-                {emoji} <span style={{fontSize:11,color:"#64748b"}}>{count}</span>
-              </button>
-            ))}
-            <button onClick={()=>setShowEmoji(showEmoji===msg.id?null:msg.id)}
-              style={{background:"none",border:"1px solid #334155",borderRadius:20,padding:"3px 10px",cursor:"pointer",fontSize:13,color:"#64748b"}}>
-              + 😄
-            </button>
-          </div>
-          {/* Emoji picker */}
-          {showEmoji===msg.id&&(
-            <div style={{position:"absolute",bottom:50,left:16,background:"#1e293b",border:"1px solid #334155",borderRadius:10,padding:"10px",display:"flex",gap:8,flexWrap:"wrap",zIndex:10,maxWidth:260,boxShadow:"0 8px 24px #000a"}}>
-              {EMOJI_REACTIONS.map(e=>(
-                <button key={e} onClick={()=>addReaction(msg.id,e)}
-                  style={{background:"none",border:"none",fontSize:22,cursor:"pointer",padding:"4px",borderRadius:6,transition:"background .1s"}}
-                  onMouseOver={ev=>ev.target.style.background="#334155"}
-                  onMouseOut={ev=>ev.target.style.background="none"}>
-                  {e}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [data,      setData]      = useState(null);
@@ -773,7 +620,7 @@ export default function App() {
             <span style={{fontSize:11,color:statusColor}}>{statusText}</span>
           </div>
           <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
-            {[["schedule","📅 Schedule"],["scores","🎯 Scores"],["leaderboard","🏆 Standings"],["banter","💬 Banter"],["manage","⚙️ Manage"]].map(([id,label])=>(
+            {[["schedule","📅 Schedule"],["scores","🎯 Scores"],["leaderboard","🏆 Standings"],["manage","⚙️ Manage"]].map(([id,label])=>(
               <button key={id} onClick={()=>setTab(id)} style={{padding:"8px 16px",border:"none",cursor:"pointer",borderRadius:"6px 6px 0 0",background:tab===id?"#1e293b":"transparent",color:tab===id?"#fff":"#64748b",fontWeight:tab===id?700:400,fontSize:13}}>{label}</button>
             ))}
           </div>
@@ -781,7 +628,7 @@ export default function App() {
       </div>
 
       <div style={{maxWidth:960,margin:"0 auto",padding:"20px 16px"}}>
-        {tab!=="manage"&&tab!=="banter"&&(
+        {tab!=="manage"&&(
           <div style={{display:"flex",gap:8,marginBottom:20}}>
             {[["doubles","👥 Doubles"],["singles","👤 Singles"]].map(([id,label])=>(
               <button key={id} onClick={()=>setLg(id)} style={{padding:"7px 18px",border:"none",borderRadius:7,cursor:"pointer",fontSize:13,fontWeight:600,background:lg===id?"#3b82f6":"#1e293b",color:lg===id?"#fff":"#64748b"}}>{label}</button>
@@ -924,11 +771,6 @@ export default function App() {
               <KnockoutBracket standA={standA} standB={standB}/>
             </div>
           </div>
-        )}
-
-        {/* BANTER */}
-        {tab==="banter"&&(
-          <BanterTab data={data} upd={upd}/>
         )}
 
         {/* MANAGE */}
