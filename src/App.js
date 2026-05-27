@@ -470,7 +470,7 @@ function BanterTab({data, upd}) {
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji]       = useState(null); // message id
   const [showMsgEmoji, setShowMsgEmoji] = useState(false); // emoji picker for input
-  const [authSet, setAuthSet]           = useState(false);
+  
   const banter = data.banter || [];
 
   function formatTime(ts) {
@@ -502,7 +502,7 @@ function BanterTab({data, upd}) {
   }
 
   async function addReaction(msgId, emoji) {
-    if (!authSet || !author) {
+    if (!!!author || !author) {
       alert("Please select your name first to react!");
       setShowEmoji(null);
       return;
@@ -529,31 +529,21 @@ function BanterTab({data, upd}) {
   return (
     <div style={{maxWidth:640,margin:"0 auto"}}>
       {/* Name selector */}
-      {!authSet ? (
-        <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:"24px",marginBottom:20,textAlign:"center"}}>
-          <div style={{fontSize:16,fontWeight:700,color:"#fff",marginBottom:4}}>Who are you?</div>
-          <div style={{fontSize:12,color:"#64748b",marginBottom:16}}>Pick your name to join the banter</div>
-          <select style={{...{width:"100%",padding:"9px 11px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"},marginBottom:12}}
-            value={author} onChange={e=>setAuthor(e.target.value)}>
-            <option value="">Select your name…</option>
-            {ALL_PLAYERS.map(p=><option key={p} value={p}>{p}</option>)}
-          </select>
-          <button
-            disabled={!author}
-            onClick={()=>setAuthSet(true)}
-            style={{padding:"9px 28px",background:"#3b82f6",border:"none",borderRadius:7,color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",opacity:author?1:.4}}>
-            Let's Go 🎾
-          </button>
-        </div>
-      ) : (
+      <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <select value={author} onChange={e=>setAuthor(e.target.value)}
+          style={{flex:1,minWidth:160,padding:"8px 10px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:author?"#e2e8f0":"#64748b",fontSize:13,outline:"none"}}>
+          <option value="">Select your name to post…</option>
+          {ALL_PLAYERS.map(p=><option key={p} value={p}>{p}</option>)}
+        </select>
+        {author&&<div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{width:30,height:30,borderRadius:"50%",background:"#1d4ed8",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:"#fff",fontSize:13}}>{author[0]}</div>
+          <span style={{fontWeight:700,color:"#93c5fd",fontSize:13}}>{author}</span>
+        </div>}
+      </div>
+
+      {/* Message input */}
+      {!!author&&(
         <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:"14px 16px",marginBottom:20}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-            <div style={{width:32,height:32,borderRadius:"50%",background:"#1d4ed8",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:"#fff",fontSize:14}}>
-              {author[0]}
-            </div>
-            <span style={{fontWeight:700,color:"#93c5fd"}}>{author}</span>
-            <button onClick={()=>setAuthSet(false)} style={{background:"none",border:"none",color:"#64748b",fontSize:11,cursor:"pointer",marginLeft:"auto"}}>Switch</button>
-          </div>
           <div style={{position:"relative"}}>
             <textarea
               value={text}
@@ -562,7 +552,6 @@ function BanterTab({data, upd}) {
               placeholder={"Talk trash, celebrate, @mention someone…"}
               style={{width:"100%",background:"#0f172a",border:"1px solid #334155",borderRadius:8,padding:"10px 12px",paddingBottom:40,color:"#e2e8f0",fontSize:13,outline:"none",resize:"none",boxSizing:"border-box",minHeight:80,fontFamily:"system-ui,sans-serif"}}
             />
-            {/* Emoji picker for message */}
             <button onClick={()=>{setShowEmoji(null);setShowMsgEmoji(v=>!v);}}
               style={{position:"absolute",bottom:10,left:10,background:"none",border:"none",fontSize:20,cursor:"pointer",opacity:.7}}>
               😄
@@ -581,9 +570,7 @@ function BanterTab({data, upd}) {
             )}
           </div>
           <div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}>
-            <button
-              disabled={!text.trim()}
-              onClick={postMessage}
+            <button disabled={!text.trim()} onClick={postMessage}
               style={{padding:"8px 20px",background:"#3b82f6",border:"none",borderRadius:7,color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",opacity:text.trim()?1:.4}}>
               Post 🎾
             </button>
@@ -592,7 +579,7 @@ function BanterTab({data, upd}) {
       )}
 
       {/* Messages */}
-      {banter.length===0 && (
+      {banter.length===0&&(
         <div style={{textAlign:"center",color:"#64748b",padding:"60px 0",fontSize:14}}>
           No banter yet — be the first to start! 🎾
         </div>
@@ -609,16 +596,15 @@ function BanterTab({data, upd}) {
           <div style={{fontSize:14,color:"#e2e8f0",lineHeight:1.6,marginBottom:10}}>
             {highlightAt(msg.text)}
           </div>
-          {/* Reactions display */}
           <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center"}}>
             {Object.entries(msg.reactions||{}).filter(([,users])=>Object.keys(users).length>0).map(([emoji,users])=>{
-              const count = Object.keys(users).length;
-              const iReacted = author && users[author];
-              return (
+              const count=Object.keys(users).length;
+              const iReacted=author&&users[author];
+              return(
                 <button key={emoji} onClick={()=>addReaction(msg.id,emoji)}
-                  title={authSet?`${Object.keys(users).join(", ")}`:"Select your name to react"}
+                  title={Object.keys(users).join(", ")}
                   style={{background:iReacted?"#1e3a5f":"#1e293b",border:`1px solid ${iReacted?"#3b82f655":"#334155"}`,borderRadius:20,padding:"3px 10px",cursor:"pointer",fontSize:13,color:"#e2e8f0",display:"flex",alignItems:"center",gap:4}}>
-                  {emoji} <span style={{fontSize:11,color:iReacted?"#93c5fd":"#64748b"}}>{count}</span>
+                  {emoji}<span style={{fontSize:11,color:iReacted?"#93c5fd":"#64748b"}}>{count}</span>
                 </button>
               );
             })}
@@ -627,12 +613,11 @@ function BanterTab({data, upd}) {
               + 😄
             </button>
           </div>
-          {/* Emoji picker */}
           {showEmoji===msg.id&&(
             <div style={{position:"absolute",bottom:50,left:16,background:"#1e293b",border:"1px solid #334155",borderRadius:10,padding:"10px",display:"flex",gap:8,flexWrap:"wrap",zIndex:10,maxWidth:260,boxShadow:"0 8px 24px #000a"}}>
               {EMOJI_REACTIONS.map(e=>(
                 <button key={e} onClick={()=>addReaction(msg.id,e)}
-                  style={{background:"none",border:"none",fontSize:22,cursor:"pointer",padding:"4px",borderRadius:6,transition:"background .1s"}}
+                  style={{background:"none",border:"none",fontSize:22,cursor:"pointer",padding:"4px",borderRadius:6}}
                   onMouseOver={ev=>ev.target.style.background="#334155"}
                   onMouseOut={ev=>ev.target.style.background="none"}>
                   {e}
@@ -652,7 +637,6 @@ const START_POINTS = 20;
 
 function PollsTab({data, upd, allPlayers}) {
   const [user, setUser]       = useState("");
-  const [userSet, setUserSet] = useState(false);
   const [betAmt, setBetAmt]   = useState({});   // matchId -> amount string
   const [section, setSection] = useState("polls"); // polls | bets | tourn | leaderboard
 
@@ -685,12 +669,12 @@ function PollsTab({data, upd, allPlayers}) {
   }
 
   async function votePoll(matchId, side) {
-    if (!userSet || !user) { alert("Please select your name first to vote!"); return; }
+    if (!user) { alert("Please select your name first!"); return; }
     await upd(d=>({...d, polls:{...d.polls, [matchId]:{...(d.polls[matchId]||{}), [user]:side}}}));
   }
 
   async function voteTournament(type, name) {
-    if (!userSet || !user) { alert("Please select your name first to vote!"); return; }
+    if (!user) { alert("Please select your name first!"); return; }
     await upd(d=>({...d, tournPoll:{...d.tournPoll, [type]:{...(d.tournPoll[type]||{}), [user]:name}}}));
   }
 
@@ -760,7 +744,7 @@ function PollsTab({data, upd, allPlayers}) {
     <div style={{maxWidth:640,margin:"0 auto"}}>
       {/* Name picker — always visible at top */}
       <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-        <select value={user} onChange={e=>{setUser(e.target.value);setUserSet(true);}}
+        <select value={user} onChange={e=>setUser(e.target.value)}
           style={{flex:1,minWidth:160,padding:"8px 10px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:user?"#e2e8f0":"#64748b",fontSize:13,outline:"none"}}>
           <option value="">Select your name to vote & bet…</option>
           {allPlayers.map(p=><option key={p} value={p}>{p}</option>)}
@@ -813,7 +797,7 @@ function PollsTab({data, upd, allPlayers}) {
                     <div style={{fontSize:10,color:"#475569",textAlign:"center"}}>{total} vote{total!==1?"s":""}</div>
                   </div>
                 )}
-                {!userSet&&<div style={{fontSize:11,color:"#64748b",textAlign:"center",marginTop:8}}>Select your name above to vote</div>}
+                {!!!user&&<div style={{fontSize:11,color:"#64748b",textAlign:"center",marginTop:8}}>Select your name above to vote</div>}
               </div>
             );
           })}
@@ -854,7 +838,7 @@ function PollsTab({data, upd, allPlayers}) {
               </div>
             );
           })}
-          {!userSet&&<div style={{fontSize:11,color:"#64748b",textAlign:"center"}}>Select your name above to vote</div>}
+          {!!!user&&<div style={{fontSize:11,color:"#64748b",textAlign:"center"}}>Select your name above to vote</div>}
         </div>
       )}
 
@@ -863,11 +847,11 @@ function PollsTab({data, upd, allPlayers}) {
         <div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
             <div style={{fontWeight:700,color:"#fff"}}>Place Your Bets</div>
-            {userSet&&<div style={{fontSize:13,color:"#f59e0b",fontWeight:700}}>🪙 {myPoints} pts left</div>}
+            {!!user&&<div style={{fontSize:13,color:"#f59e0b",fontWeight:700}}>🪙 {myPoints} pts left</div>}
           </div>
-          {!userSet&&<div style={{textAlign:"center",color:"#64748b",padding:"40px 0"}}>Select your name above to place bets.</div>}
+          {!!!user&&<div style={{textAlign:"center",color:"#64748b",padding:"40px 0"}}>Select your name above to place bets.</div>}
           {pending.length===0&&<div style={{textAlign:"center",color:"#64748b",padding:"40px 0"}}>No upcoming matches to bet on.</div>}
-          {userSet&&pending.map(m=>{
+          {!!user&&pending.map(m=>{
             const bet = myBet(m.id);
             const ownMatch = isMyMatch(m);
             const totalPool = Object.values(bets[m.id]||{}).reduce((s,b)=>s+b.amount,0);
