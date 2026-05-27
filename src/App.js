@@ -560,7 +560,7 @@ function BanterTab({data, upd}) {
               style={{width:"100%",background:"#0f172a",border:"1px solid #334155",borderRadius:8,padding:"10px 12px",paddingBottom:40,color:"#e2e8f0",fontSize:13,outline:"none",resize:"none",boxSizing:"border-box",minHeight:80,fontFamily:"system-ui,sans-serif"}}
             />
             {/* Emoji picker for message */}
-            <button onClick={()=>setShowMsgEmoji(v=>!v)}
+            <button onClick={()=>{setShowEmoji(null);setShowMsgEmoji(v=>!v);}}
               style={{position:"absolute",bottom:10,left:10,background:"none",border:"none",fontSize:20,cursor:"pointer",opacity:.7}}>
               😄
             </button>
@@ -619,7 +619,7 @@ function BanterTab({data, upd}) {
                 </button>
               );
             })}
-            <button onClick={()=>setShowEmoji(showEmoji===msg.id?null:msg.id)}
+            <button onClick={()=>{setShowMsgEmoji(false);setShowEmoji(showEmoji===msg.id?null:msg.id);}}
               style={{background:"none",border:"1px solid #334155",borderRadius:20,padding:"3px 10px",cursor:"pointer",fontSize:13,color:"#64748b"}}>
               + 😄
             </button>
