@@ -502,20 +502,23 @@ function BanterTab({data, upd}) {
   }
 
   async function addReaction(msgId, emoji) {
-    // Use a guest name if not set so anyone can react
-    const reactAs = authSet && author ? author : "guest_" + Date.now();
+    if (!authSet || !author) {
+      alert("Please select your name first to react!");
+      setShowEmoji(null);
+      return;
+    }
     await upd(d => ({
       ...d,
       banter: (d.banter||[]).map(m => {
         if (m.id !== msgId) return m;
         const reactions = JSON.parse(JSON.stringify(m.reactions||{}));
         if (!reactions[emoji]) reactions[emoji] = {};
-        if (authSet && author && reactions[emoji][author]) {
-          // Toggle off own reaction
+        if (reactions[emoji][author]) {
+          // Toggle off — remove reaction
           delete reactions[emoji][author];
           if (Object.keys(reactions[emoji]).length===0) delete reactions[emoji];
         } else {
-          reactions[emoji][reactAs] = true;
+          reactions[emoji][author] = true;
         }
         return {...m, reactions};
       })
