@@ -59,7 +59,7 @@ const DEFAULT = {
     "Sanjay/Ravi":   {"5/16":"5pm avail","5/17":"Anytime","5/20":"6pm avail","5/21":"6pm avail"},
   },
   sAvail:   {"Dhar":{"5/15":"5pm+","5/16":"8-10am"},"Viraj":{"5/15":"5pm+"}},
-  dMatches: [], sMatches: [], did:1, sid:1, banter: [], polls: {}, tournPoll: {doubles:{}, singles:{}}, bets: {}, betPoints: {},
+  dMatches: [], sMatches: [], did:1, sid:1, banter: [],
 };
 
 // ─── Tennis scoring logic ─────────────────────────────────────────────────────
@@ -609,313 +609,6 @@ function BanterTab({data, upd}) {
   );
 }
 
-
-// ─── Polls & Betting Tab ─────────────────────────────────────────────────────
-const START_POINTS = 20;
-
-function PollsTab({data, upd, allPlayers}) {
-  const [user, setUser]       = useState("");
-  const [userSet, setUserSet] = useState(false);
-  const [betAmt, setBetAmt]   = useState({});   // matchId -> amount string
-  const [section, setSection] = useState("polls"); // polls | bets | tourn | leaderboard
-
-  const polls     = data.polls     || {};
-  const tournPoll = data.tournPoll || {doubles:{}, singles:{}};
-  const bets      = data.bets      || {};
-  const betPoints = data.betPoints || {};
-
-  const allMatches = [...(data.dMatches||[]), ...(data.sMatches||[])];
-  const pending    = allMatches.filter(m=>!m.done);
-  const complete   = allMatches.filter(m=>m.done);
-
-  const myPoints = betPoints[user] !== undefined ? betPoints[user] : START_POINTS;
-
-  // ── Poll helpers ──
-  function getPollPct(matchId, side) {
-    const p = polls[matchId] || {};
-    const total = Object.keys(p).length;
-    if (!total) return 0;
-    const count = Object.values(p).filter(v=>v===side).length;
-    return Math.round(count/total*100);
-  }
-
-  function getTournPct(type, name) {
-    const p = tournPoll[type] || {};
-    const total = Object.keys(p).length;
-    if (!total) return 0;
-    const count = Object.values(p).filter(v=>v===name).length;
-    return Math.round(count/total*100);
-  }
-
-  async function votePoll(matchId, side) {
-    if (!user) return;
-    await upd(d=>({...d, polls:{...d.polls, [matchId]:{...(d.polls[matchId]||{}), [user]:side}}}));
-  }
-
-  async function voteTournament(type, name) {
-    if (!user) return;
-    await upd(d=>({...d, tournPoll:{...d.tournPoll, [type]:{...(d.tournPoll[type]||{}), [user]:name}}}));
-  }
-
-  // ── Bet helpers ──
-  function getMatchType(m) {
-    return (data.dMatches||[]).find(x=>x.id===m.id) ? "doubles" : "singles";
-  }
-
-  function myBet(matchId) {
-    return (bets[matchId]||{})[user];
-  }
-
-  function isMyMatch(m) {
-    const type = getMatchType(m);
-    const teams = type==="doubles" ? data.doubles : data.singles;
-    // Check if user name appears in either team
-    return [m.a, m.b].some(t=>t.split("/").some(n=>n===user));
-  }
-
-  async function placeBet(m, side, amount) {
-    if (!user || !amount || amount<1) return;
-    if (amount > myPoints) return;
-    await upd(d=>{
-      const newBets = {...d.bets, [m.id]:{...(d.bets[m.id]||{}), [user]:{side, amount}}};
-      const newPts  = {...d.betPoints, [user]:(d.betPoints[user]!==undefined?d.betPoints[user]:START_POINTS) - amount};
-      return {...d, bets:newBets, betPoints:newPts};
-    });
-  }
-
-  // Compute bet leaderboard (settle completed matches)
-  function betLeaderboard() {
-    const pts = {...betPoints};
-    // Add winnings for completed matches
-    for (const m of complete) {
-      const wa = calcWins(m.sa), wb = calcWins(m.sb); if(!wa||!wb) continue;
-      const winner = wa.w>wb.w ? m.a : m.b;
-      const matchBets = bets[m.id] || {};
-      const totalPool = Object.values(matchBets).reduce((s,b)=>s+b.amount,0);
-      const winners   = Object.entries(matchBets).filter(([,b])=>b.side===winner);
-      const totalWin  = winners.reduce((s,[,b])=>s+b.amount,0);
-      for (const [player, b] of winners) {
-        if (!totalWin) continue;
-        const share = (b.amount/totalWin) * totalPool;
-        pts[player] = (pts[player]!==undefined?pts[player]:START_POINTS) + share;
-      }
-    }
-    // Include all known players with default points
-    const everyone = [...new Set([...allPlayers, ...Object.keys(pts)])];
-    return everyone
-      .map(n=>({n, pts: Math.round(pts[n]!==undefined?pts[n]:START_POINTS)}))
-      .sort((a,b)=>b.pts-a.pts);
-  }
-
-  const lb = betLeaderboard();
-
-  const pct_bar = (pct, color) => (
-    <div style={{height:6,borderRadius:3,background:"#1e293b",overflow:"hidden",flex:1}}>
-      <div style={{height:"100%",width:`${pct}%`,background:color,borderRadius:3,transition:"width .5s"}}/>
-    </div>
-  );
-
-  const secBtn = (id,label) => (
-    <button key={id} onClick={()=>setSection(id)} style={{padding:"7px 16px",border:"none",borderRadius:7,cursor:"pointer",fontSize:13,fontWeight:600,background:section===id?"#3b82f6":"#1e293b",color:section===id?"#fff":"#64748b"}}>{label}</button>
-  );
-
-  return (
-    <div style={{maxWidth:640,margin:"0 auto"}}>
-      {/* Name picker */}
-      {!userSet ? (
-        <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:"24px",marginBottom:20,textAlign:"center"}}>
-          <div style={{fontSize:16,fontWeight:700,color:"#fff",marginBottom:4}}>Who are you?</div>
-          <div style={{fontSize:12,color:"#64748b",marginBottom:16}}>Pick your name to vote and bet</div>
-          <select style={{width:"100%",padding:"9px 11px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:12}}
-            value={user} onChange={e=>setUser(e.target.value)}>
-            <option value="">Select your name…</option>
-            {allPlayers.map(p=><option key={p} value={p}>{p}</option>)}
-          </select>
-          <button disabled={!user} onClick={()=>setUserSet(true)}
-            style={{padding:"9px 28px",background:"#3b82f6",border:"none",borderRadius:7,color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",opacity:user?1:.4}}>
-            Let's Go 🎾
-          </button>
-        </div>
-      ) : (
-        <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:32,height:32,borderRadius:"50%",background:"#1d4ed8",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:"#fff",fontSize:14}}>{user[0]}</div>
-          <span style={{fontWeight:700,color:"#93c5fd"}}>{user}</span>
-          <span style={{fontSize:12,color:"#64748b",marginLeft:"auto"}}>🪙 {myPoints} pts remaining</span>
-          <button onClick={()=>setUserSet(false)} style={{background:"none",border:"none",color:"#64748b",fontSize:11,cursor:"pointer"}}>Switch</button>
-        </div>
-      )}
-
-      {/* Section tabs */}
-      <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
-        {secBtn("polls","🗳️ Match Polls")}
-        {secBtn("tourn","🏆 Tournament Poll")}
-        {secBtn("bets","🪙 Betting")}
-        {secBtn("leaderboard","📊 Bet Leaderboard")}
-      </div>
-
-      {/* MATCH POLLS */}
-      {section==="polls"&&(
-        <div>
-          <div style={{fontWeight:700,color:"#fff",marginBottom:16}}>Who will win?</div>
-          {pending.length===0&&<div style={{textAlign:"center",color:"#64748b",padding:"40px 0"}}>No upcoming matches to vote on.</div>}
-          {pending.map(m=>{
-            const myVote = polls[m.id]?.[user];
-            const pA = getPollPct(m.id, m.a);
-            const pB = getPollPct(m.id, m.b);
-            const total = Object.keys(polls[m.id]||{}).length;
-            return (
-              <div key={m.id} style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:"16px",marginBottom:12}}>
-                <div style={{fontSize:12,color:"#64748b",marginBottom:10}}>{m.date}{m.time?` · ${m.time}`:""}</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:12,marginBottom:14}}>
-                  <button onClick={()=>votePoll(m.id,m.a)} style={{padding:"10px",background:myVote===m.a?"#1d4ed8":"#111827",border:`2px solid ${myVote===m.a?"#3b82f6":"#334155"}`,borderRadius:8,color:myVote===m.a?"#fff":"#cbd5e1",fontWeight:700,fontSize:13,cursor:userSet?"pointer":"not-allowed",textAlign:"center"}}>
-                    {m.a}
-                  </button>
-                  <div style={{color:"#475569",fontWeight:700,fontSize:12}}>VS</div>
-                  <button onClick={()=>votePoll(m.id,m.b)} style={{padding:"10px",background:myVote===m.b?"#1d4ed8":"#111827",border:`2px solid ${myVote===m.b?"#3b82f6":"#334155"}`,borderRadius:8,color:myVote===m.b?"#fff":"#cbd5e1",fontWeight:700,fontSize:13,cursor:userSet?"pointer":"not-allowed",textAlign:"center"}}>
-                    {m.b}
-                  </button>
-                </div>
-                {total>0&&(
-                  <div>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                      <span style={{fontSize:11,color:"#93c5fd",width:32,textAlign:"right"}}>{pA}%</span>
-                      {pct_bar(pA,"#3b82f6")}
-                      {pct_bar(pB,"#10b981")}
-                      <span style={{fontSize:11,color:"#10b981",width:32}}>{pB}%</span>
-                    </div>
-                    <div style={{fontSize:10,color:"#475569",textAlign:"center"}}>{total} vote{total!==1?"s":""}</div>
-                  </div>
-                )}
-                {!userSet&&<div style={{fontSize:11,color:"#64748b",textAlign:"center",marginTop:8}}>Select your name above to vote</div>}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* TOURNAMENT POLL */}
-      {section==="tourn"&&(
-        <div>
-          <div style={{fontWeight:700,color:"#fff",marginBottom:20}}>Who will win the tournament?</div>
-          {["doubles","singles"].map(type=>{
-            const players = type==="doubles"?data.doubles:data.singles;
-            const myVote  = tournPoll[type]?.[user];
-            const total   = Object.keys(tournPoll[type]||{}).length;
-            return (
-              <div key={type} style={{marginBottom:28}}>
-                <div style={{fontSize:13,color:"#93c5fd",fontWeight:700,marginBottom:12,textTransform:"uppercase",letterSpacing:1}}>{type}</div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
-                  {players.map(p=>{
-                    const pct = getTournPct(type,p);
-                    const voted = myVote===p;
-                    return (
-                      <button key={p} onClick={()=>voteTournament(type,p)} style={{padding:"12px 10px",background:voted?"#1d4ed8":"#111827",border:`2px solid ${voted?"#3b82f6":"#334155"}`,borderRadius:10,color:voted?"#fff":"#cbd5e1",fontWeight:700,fontSize:13,cursor:userSet?"pointer":"not-allowed",textAlign:"center"}}>
-                        <div style={{marginBottom:6}}>{p}</div>
-                        {total>0&&(
-                          <div>
-                            <div style={{height:4,background:"#1e293b",borderRadius:2,overflow:"hidden",margin:"0 auto 4px"}}>
-                              <div style={{height:"100%",width:`${pct}%`,background:voted?"#93c5fd":"#3b82f6",borderRadius:2}}/>
-                            </div>
-                            <div style={{fontSize:11,color:voted?"#93c5fd":"#64748b"}}>{pct}%</div>
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-                {total>0&&<div style={{fontSize:11,color:"#475569",marginTop:8}}>{total} vote{total!==1?"s":""}</div>}
-              </div>
-            );
-          })}
-          {!userSet&&<div style={{fontSize:11,color:"#64748b",textAlign:"center"}}>Select your name above to vote</div>}
-        </div>
-      )}
-
-      {/* BETTING */}
-      {section==="bets"&&(
-        <div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-            <div style={{fontWeight:700,color:"#fff"}}>Place Your Bets</div>
-            {userSet&&<div style={{fontSize:13,color:"#f59e0b",fontWeight:700}}>🪙 {myPoints} pts left</div>}
-          </div>
-          {!userSet&&<div style={{textAlign:"center",color:"#64748b",padding:"40px 0"}}>Select your name above to place bets.</div>}
-          {pending.length===0&&<div style={{textAlign:"center",color:"#64748b",padding:"40px 0"}}>No upcoming matches to bet on.</div>}
-          {userSet&&pending.map(m=>{
-            const bet = myBet(m.id);
-            const ownMatch = isMyMatch(m);
-            const totalPool = Object.values(bets[m.id]||{}).reduce((s,b)=>s+b.amount,0);
-            const amt = betAmt[m.id]||"";
-            return (
-              <div key={m.id} style={{background:"#0e1320",border:`1px solid ${bet?"#f59e0b44":"#1e293b"}`,borderRadius:12,padding:"16px",marginBottom:12}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                  <div style={{fontSize:13,fontWeight:700,color:"#cbd5e1"}}>{m.a} vs {m.b}</div>
-                  <div style={{fontSize:11,color:"#64748b"}}>{m.date}</div>
-                </div>
-                {ownMatch&&<div style={{fontSize:12,color:"#f59e0b",marginBottom:8}}>⚠️ Can't bet on your own match</div>}
-                {myPoints<=0&&!bet&&<div style={{fontSize:12,color:"#ef4444",marginBottom:8}}>❌ No points remaining</div>}
-                {bet ? (
-                  <div style={{background:"#1a2a0a",border:"1px solid #f59e0b44",borderRadius:8,padding:"10px 14px"}}>
-                    <div style={{fontSize:12,color:"#f59e0b",fontWeight:700}}>Your bet: {bet.amount} pts on {bet.side}</div>
-                    <div style={{fontSize:11,color:"#64748b",marginTop:2}}>Total pool: {totalPool} pts</div>
-                  </div>
-                ) : !ownMatch && myPoints>0 && (
-                  <div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-                      {[m.a,m.b].map(side=>(
-                        <button key={side} onClick={()=>{
-                          const a=parseInt(amt);
-                          if(!a||a<1||a>myPoints) return;
-                          placeBet(m,side,a);
-                        }} style={{padding:"10px",background:"#111827",border:"2px solid #334155",borderRadius:8,color:"#cbd5e1",fontWeight:700,fontSize:12,cursor:"pointer",textAlign:"center"}}>
-                          Bet on {side}
-                        </button>
-                      ))}
-                    </div>
-                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                      <input type="number" min="1" max={myPoints} placeholder="Points to bet"
-                        value={amt} onChange={e=>setBetAmt(b=>({...b,[m.id]:e.target.value}))}
-                        style={{flex:1,padding:"8px 10px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:13,outline:"none"}}/>
-                      <span style={{fontSize:11,color:"#64748b"}}>max {myPoints}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* BET LEADERBOARD */}
-      {section==="leaderboard"&&(
-        <div>
-          <div style={{fontWeight:700,color:"#fff",marginBottom:16}}>🪙 Betting Leaderboard</div>
-          <div style={{fontSize:12,color:"#64748b",marginBottom:16}}>Everyone starts with {START_POINTS} pts. Win bets to earn more!</div>
-          <div style={{border:"1px solid #1e293b",borderRadius:8,overflow:"hidden"}}>
-            <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <thead>
-                <tr style={{background:"#0a1020"}}>
-                  {["#","Player","Points"].map((h,i)=>(
-                    <th key={h} style={{padding:"10px 12px",fontSize:11,color:"#64748b",fontWeight:600,textTransform:"uppercase",letterSpacing:.5,textAlign:i===1?"left":"center",borderBottom:"1px solid #1e293b"}}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {lb.map((p,i)=>(
-                  <tr key={p.n} style={{background:i%2===0?"#111827":"#0f172a"}}>
-                    <td style={{padding:"11px 12px",textAlign:"center",fontSize:16,borderBottom:"1px solid #1e293b"}}>{["🥇","🥈","🥉"][i]||`${i+1}`}</td>
-                    <td style={{padding:"11px 12px",fontWeight:700,color:p.n===user?"#93c5fd":"#cbd5e1",borderBottom:"1px solid #1e293b"}}>{p.n}{p.n===user?" (you)":""}</td>
-                    <td style={{padding:"11px 12px",textAlign:"center",color:"#f59e0b",fontWeight:800,fontSize:15,borderBottom:"1px solid #1e293b"}}>🪙 {p.pts}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [data,      setData]      = useState(null);
@@ -1080,7 +773,7 @@ export default function App() {
             <span style={{fontSize:11,color:statusColor}}>{statusText}</span>
           </div>
           <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
-            {[["schedule","📅 Schedule"],["scores","🎯 Scores"],["leaderboard","🏆 Standings"],["polls","🗳️ Polls"],["banter","💬 Banter"],["manage","⚙️ Manage"]].map(([id,label])=>(
+            {[["schedule","📅 Schedule"],["scores","🎯 Scores"],["leaderboard","🏆 Standings"],["banter","💬 Banter"],["manage","⚙️ Manage"]].map(([id,label])=>(
               <button key={id} onClick={()=>setTab(id)} style={{padding:"8px 16px",border:"none",cursor:"pointer",borderRadius:"6px 6px 0 0",background:tab===id?"#1e293b":"transparent",color:tab===id?"#fff":"#64748b",fontWeight:tab===id?700:400,fontSize:13}}>{label}</button>
             ))}
           </div>
@@ -1088,7 +781,7 @@ export default function App() {
       </div>
 
       <div style={{maxWidth:960,margin:"0 auto",padding:"20px 16px"}}>
-        {tab!=="manage"&&tab!=="banter"&&tab!=="polls"&&(
+        {tab!=="manage"&&tab!=="banter"&&(
           <div style={{display:"flex",gap:8,marginBottom:20}}>
             {[["doubles","👥 Doubles"],["singles","👤 Singles"]].map(([id,label])=>(
               <button key={id} onClick={()=>setLg(id)} style={{padding:"7px 18px",border:"none",borderRadius:7,cursor:"pointer",fontSize:13,fontWeight:600,background:lg===id?"#3b82f6":"#1e293b",color:lg===id?"#fff":"#64748b"}}>{label}</button>
@@ -1231,15 +924,6 @@ export default function App() {
               <KnockoutBracket standA={standA} standB={standB}/>
             </div>
           </div>
-        )}
-
-        {/* POLLS */}
-        {tab==="polls"&&(
-          <PollsTab data={data} upd={upd} allPlayers={[
-            "Nitin","Ashish","Jai","Deep","Tarun","Sumit","Bobby","Satendra",
-            "Akash","Micky","Dhar","Vineet","Sanjay","Ravi","Shailesh","Uzair",
-            "Pratyush","Viraj","Tushar"
-          ]}/>
         )}
 
         {/* BANTER */}
