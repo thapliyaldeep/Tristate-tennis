@@ -638,6 +638,20 @@ const START_POINTS = 20;
 function PollsTab({data, upd, allPlayers}) {
   const [user, setUser]       = useState("");
   const [betAmt, setBetAmt]   = useState({});   // matchId -> amount string
+
+  // Device-level vote/bet tracking via localStorage
+  const DEVICE_KEY = "tristate_device_votes";
+  function getDeviceVotes() {
+    try { return JSON.parse(localStorage.getItem(DEVICE_KEY)||"{}"); } catch { return {}; }
+  }
+  function markDeviceVote(key) {
+    const v = getDeviceVotes();
+    v[key] = true;
+    try { localStorage.setItem(DEVICE_KEY, JSON.stringify(v)); } catch {}
+  }
+  function hasDeviceVoted(key) {
+    return !!getDeviceVotes()[key];
+  }
   const [section, setSection] = useState("polls"); // polls | bets | tourn | leaderboard
 
   const polls     = data.polls     || {};
@@ -670,12 +684,18 @@ function PollsTab({data, upd, allPlayers}) {
 
   async function votePoll(matchId, side) {
     if (!user) { alert("Please select your name first!"); return; }
+    const key = "poll_" + matchId;
+    if (hasDeviceVoted(key)) { alert("You have already voted on this match from this device!"); return; }
     await upd(d=>({...d, polls:{...d.polls, [matchId]:{...(d.polls[matchId]||{}), [user]:side}}}));
+    markDeviceVote(key);
   }
 
   async function voteTournament(type, name) {
     if (!user) { alert("Please select your name first!"); return; }
+    const key = "tourn_" + type;
+    if (hasDeviceVoted(key)) { alert("You have already voted on this tournament from this device!"); return; }
     await upd(d=>({...d, tournPoll:{...d.tournPoll, [type]:{...(d.tournPoll[type]||{}), [user]:name}}}));
+    markDeviceVote(key);
   }
 
   // ── Bet helpers ──
@@ -697,11 +717,14 @@ function PollsTab({data, upd, allPlayers}) {
   async function placeBet(m, side, amount) {
     if (!user || !amount || amount<1) return;
     if (amount > myPoints) return;
+    const key = "bet_" + m.id;
+    if (hasDeviceVoted(key)) { alert("You have already placed a bet on this match from this device!"); return; }
     await upd(d=>{
       const newBets = {...d.bets, [m.id]:{...(d.bets[m.id]||{}), [user]:{side, amount}}};
       const newPts  = {...d.betPoints, [user]:(d.betPoints[user]!==undefined?d.betPoints[user]:START_POINTS) - amount};
       return {...d, bets:newBets, betPoints:newPts};
     });
+    markDeviceVote(key);
   }
 
   // Compute bet leaderboard (settle completed matches)
@@ -743,16 +766,23 @@ function PollsTab({data, upd, allPlayers}) {
   return (
     <div style={{maxWidth:640,margin:"0 auto"}}>
       {/* Name picker — always visible at top */}
-      <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-        <select value={user} onChange={e=>setUser(e.target.value)}
-          style={{flex:1,minWidth:160,padding:"8px 10px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:user?"#e2e8f0":"#64748b",fontSize:13,outline:"none"}}>
-          <option value="">Select your name to vote & bet…</option>
-          {allPlayers.map(p=><option key={p} value={p}>{p}</option>)}
-        </select>
-        {user&&<div style={{display:"flex",alignItems:"center",gap:8}}>
-          <div style={{width:30,height:30,borderRadius:"50%",background:"#1d4ed8",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:"#fff",fontSize:13}}>{user[0]}</div>
+      <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:10,padding:"12px 16px",marginBottom:20}}>
+        <div style={{fontSize:11,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>Who are you?</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <select value={allPlayers.includes(user)?user:""} onChange={e=>setUser(e.target.value)}
+            style={{flex:1,minWidth:140,padding:"8px 10px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:13,outline:"none"}}>
+            <option value="">Pick from player list…</option>
+            {allPlayers.map(p=><option key={p} value={p}>{p}</option>)}
+          </select>
+          <input value={allPlayers.includes(user)?"":user} onChange={e=>setUser(e.target.value)}
+            placeholder="Or type guest name…"
+            style={{flex:1,minWidth:130,padding:"8px 10px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:13,outline:"none"}}/>
+        </div>
+        {user&&<div style={{display:"flex",alignItems:"center",gap:8,marginTop:10}}>
+          <div style={{width:28,height:28,borderRadius:"50%",background:"#1d4ed8",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:"#fff",fontSize:12}}>{user[0].toUpperCase()}</div>
           <span style={{fontWeight:700,color:"#93c5fd",fontSize:13}}>{user}</span>
-          {section==="bets"&&<span style={{fontSize:12,color:"#f59e0b",marginLeft:4}}>🪙 {myPoints} pts</span>}
+          <span style={{fontSize:12,color:"#f59e0b",marginLeft:4}}>🪙 {myPoints} pts</span>
+          <button onClick={()=>setUser("")} style={{background:"none",border:"none",color:"#64748b",fontSize:11,cursor:"pointer",marginLeft:"auto"}}>Change</button>
         </div>}
       </div>
 
@@ -777,15 +807,23 @@ function PollsTab({data, upd, allPlayers}) {
             return (
               <div key={m.id} style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:"16px",marginBottom:12}}>
                 <div style={{fontSize:12,color:"#64748b",marginBottom:10}}>{m.date}{m.time?` · ${m.time}`:""}</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:12,marginBottom:14}}>
-                  <button onClick={()=>votePoll(m.id,m.a)} style={{padding:"10px",background:myVote===m.a?"#1d4ed8":"#111827",border:`2px solid ${myVote===m.a?"#3b82f6":"#334155"}`,borderRadius:8,color:myVote===m.a?"#fff":"#cbd5e1",fontWeight:700,fontSize:13,cursor:"pointer",textAlign:"center"}}>
-                    {m.a}
-                  </button>
-                  <div style={{color:"#475569",fontWeight:700,fontSize:12}}>VS</div>
-                  <button onClick={()=>votePoll(m.id,m.b)} style={{padding:"10px",background:myVote===m.b?"#1d4ed8":"#111827",border:`2px solid ${myVote===m.b?"#3b82f6":"#334155"}`,borderRadius:8,color:myVote===m.b?"#fff":"#cbd5e1",fontWeight:700,fontSize:13,cursor:"pointer",textAlign:"center"}}>
-                    {m.b}
-                  </button>
-                </div>
+                {(()=>{
+                  const voted = hasDeviceVoted("poll_"+m.id);
+                  return(
+                    <div>
+                      {voted&&<div style={{fontSize:11,color:"#10b981",marginBottom:8,textAlign:"center"}}>✓ You voted on this device</div>}
+                      <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:12,marginBottom:14}}>
+                        <button onClick={()=>votePoll(m.id,m.a)} disabled={voted} style={{padding:"10px",background:myVote===m.a?"#1d4ed8":"#111827",border:`2px solid ${myVote===m.a?"#3b82f6":"#334155"}`,borderRadius:8,color:myVote===m.a?"#fff":"#cbd5e1",fontWeight:700,fontSize:13,cursor:voted?"not-allowed":"pointer",textAlign:"center",opacity:voted&&myVote!==m.a?.5:1}}>
+                          {m.a}{myVote===m.a?" ✓":""}
+                        </button>
+                        <div style={{color:"#475569",fontWeight:700,fontSize:12}}>VS</div>
+                        <button onClick={()=>votePoll(m.id,m.b)} disabled={voted} style={{padding:"10px",background:myVote===m.b?"#1d4ed8":"#111827",border:`2px solid ${myVote===m.b?"#3b82f6":"#334155"}`,borderRadius:8,color:myVote===m.b?"#fff":"#cbd5e1",fontWeight:700,fontSize:13,cursor:voted?"not-allowed":"pointer",textAlign:"center",opacity:voted&&myVote!==m.b?.5:1}}>
+                          {m.b}{myVote===m.b?" ✓":""}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
                 {total>0&&(
                   <div>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
