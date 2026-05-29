@@ -65,64 +65,81 @@ const DEFAULT = {
 // ─── Tennis scoring logic ─────────────────────────────────────────────────────
 const PTS = [0,15,30,40];
 
-function newLive() {
+function newLive(serving="a") {
   return {
-    sets: [],           // [{a:6,b:4}, ...]
-    games: {a:0,b:0},  // current set games
-    points: {a:0,b:0}, // 0-3, with deuce/ad logic
+    sets: [],
+    games: {a:0,b:0},
+    points: {a:0,b:0},
     deuce: false,
-    adv: null,          // "a" or "b" or null
-    serving: "a",       // who is serving
+    adv: null,
+    serving,
+    history: [],        // stack of previous states for undo
+    startTs: Date.now(),
+    setTs: [Date.now()],   // timestamp when each set started
+    gameTs: [Date.now()],  // timestamp when each game started
+    pointLog: [],          // [{who, ts, gameIdx, setIdx}]
+    totalGames: 0,
   };
 }
 
 // Returns updated live state after a point won by "a" or "b"
 function addPoint(live, who) {
+  // Save snapshot to history before mutating (for undo)
+  const snapshot = JSON.parse(JSON.stringify(live));
+  snapshot.history = []; // don't nest history inside history
   let l = JSON.parse(JSON.stringify(live));
+  l.history = [...(l.history||[]), snapshot];
+  if (l.history.length > 50) l.history = l.history.slice(-50); // cap at 50
   const opp = who==="a"?"b":"a";
+  const now = Date.now();
+
+  // Log the point
+  l.pointLog = [...(l.pointLog||[]), {who, ts:now, set:l.sets.length, game:l.totalGames||0}];
 
   // Deuce/advantage logic
   if (l.deuce) {
-    if (l.adv===who) {
-      // win the game
-      l = winGame(l, who);
-    } else if (l.adv===opp) {
-      l.adv = null; // back to deuce
-    } else {
-      l.adv = who; // advantage
-    }
+    if (l.adv===who) { l = winGame(l, who); }
+    else if (l.adv===opp) { l.adv = null; }
+    else { l.adv = who; }
     return l;
   }
 
   l.points[who]++;
-  // Check for deuce (both at 40 = index 3)
   if (l.points.a===3 && l.points.b===3) {
     l.deuce = true;
     l.points = {a:3,b:3};
     return l;
   }
-  // Check for game win
-  if (l.points[who]===4) {
-    l = winGame(l, who);
-  }
+  if (l.points[who]===4) { l = winGame(l, who); }
   return l;
+}
+
+// Undo last point
+function undoPoint(live) {
+  if (!live.history || live.history.length===0) return live;
+  const prev = live.history[live.history.length-1];
+  // Restore previous state but keep full history minus last entry
+  return {...prev, history: live.history.slice(0,-1)};
 }
 
 function winGame(live, who) {
   let l = JSON.parse(JSON.stringify(live));
   const opp = who==="a"?"b":"a";
+  const now = Date.now();
   l.points = {a:0,b:0};
   l.deuce = false;
   l.adv = null;
   l.games[who]++;
-  l.serving = l.serving==="a"?"b":"a"; // switch serve after each game
+  l.totalGames = (l.totalGames||0) + 1;
+  l.serving = l.serving==="a"?"b":"a";
+  l.gameTs = [...(l.gameTs||[]), now];
 
-  // Check set win: 6 games, must lead by 2, or tiebreak at 6-6
   const gw = l.games[who], go = l.games[opp];
   const setWon = (gw>=6 && gw-go>=2) || gw===7;
   if (setWon) {
-    l.sets.push({a:l.games.a, b:l.games.b});
+    l.sets.push({a:l.games.a, b:l.games.b, endTs:now});
     l.games = {a:0,b:0};
+    l.setTs = [...(l.setTs||[]), now];
   }
   return l;
 }
@@ -208,14 +225,132 @@ function Modal({title,onClose,children}) {
 }
 
 // ─── Live Score View ─────────────────────────────────────────────────────────
+function fmt(ms) {
+  if (!ms || ms<0) return "0:00";
+  const s=Math.floor(ms/1000), m=Math.floor(s/60), sec=s%60;
+  return `${m}:${sec.toString().padStart(2,"0")}`;
+}
+
+function MatchMetrics({live, nameA, nameB}) {
+  const now = Date.now();
+  const elapsed = now - (live.startTs||now);
+  const sets = live.sets||[];
+  const gameTs = live.gameTs||[];
+  const setTs  = live.setTs||[];
+  const pointLog = live.pointLog||[];
+
+  // Game durations
+  const gameDurations = [];
+  for (let i=1; i<gameTs.length; i++) gameDurations.push(gameTs[i]-gameTs[i-1]);
+  const avgGame = gameDurations.length ? gameDurations.reduce((s,v)=>s+v,0)/gameDurations.length : 0;
+  const maxGame = gameDurations.length ? Math.max(...gameDurations) : 0;
+
+  // Set durations
+  const setDurations = [];
+  for (let i=1; i<setTs.length; i++) setDurations.push(setTs[i]-setTs[i-1]);
+
+  // Points per player
+  const ptsA = pointLog.filter(p=>p.who==="a").length;
+  const ptsB = pointLog.filter(p=>p.who==="b").length;
+
+  const row = (label, val) => (
+    <div key={label} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #1e293b"}}>
+      <span style={{color:"#64748b",fontSize:13}}>{label}</span>
+      <span style={{color:"#e2e8f0",fontWeight:600,fontSize:13}}>{val}</span>
+    </div>
+  );
+
+  return (
+    <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:"16px",marginTop:16}}>
+      <div style={{fontWeight:700,color:"#fff",marginBottom:12,fontSize:14}}>📊 Match Stats</div>
+      {row("Match Duration", fmt(elapsed))}
+      {row(`Total Points (${nameA})`, ptsA)}
+      {row(`Total Points (${nameB})`, ptsB)}
+      {row("Total Games", live.totalGames||0)}
+      {avgGame>0&&row("Avg Game Duration", fmt(avgGame))}
+      {maxGame>0&&row("Longest Game", fmt(maxGame))}
+      {setDurations.map((d,i)=>row(`Set ${i+1} Duration`, fmt(d)))}
+      {sets.map((s,i)=>(
+        <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #1e293b"}}>
+          <span style={{color:"#64748b",fontSize:13}}>Set {i+1}</span>
+          <span style={{color:s.a>s.b?"#34d399":"#f87171",fontWeight:600,fontSize:13}}>{s.a}-{s.b} {s.a>s.b?nameA:nameB}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TossScreen({nameA, nameB, onTossResult}) {
+  const [flipping, setFlipping] = useState(false);
+  const [winner, setWinner]     = useState(null); // "a" or "b"
+  const [choice, setChoice]     = useState(null); // "serve" or "receive"
+
+  function flipCoin() {
+    setFlipping(true);
+    setTimeout(()=>{
+      setWinner(Math.random()<.5?"a":"b");
+      setFlipping(false);
+    }, 1200);
+  }
+
+  function confirm() {
+    if (!winner || !choice) return;
+    // If toss winner chose serve, they serve. If receive, opponent serves.
+    const serving = choice==="serve" ? winner : (winner==="a"?"b":"a");
+    onTossResult(serving);
+  }
+
+  const winnerName = winner==="a"?nameA:nameB;
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"#07090f",zIndex:1000,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24,gap:24}}>
+      <div style={{fontSize:22,fontWeight:800,color:"#fff"}}>🎾 Pre-Match Toss</div>
+      <div style={{fontSize:14,color:"#64748b"}}>Flip a coin to decide who serves first</div>
+
+      {/* Coin */}
+      <div onClick={!flipping&&!winner?flipCoin:undefined}
+        style={{width:100,height:100,borderRadius:"50%",background:flipping?"linear-gradient(135deg,#FFD700,#f59e0b)":"linear-gradient(135deg,#1d4ed8,#3b82f6)",
+          display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,cursor:!winner&&!flipping?"pointer":"default",
+          boxShadow:"0 8px 32px #0008",transition:"all .3s",
+          animation:flipping?"spin 0.3s linear infinite":"none"}}>
+        {flipping?"🪙":winner?"✓":"🪙"}
+      </div>
+      <style>{`@keyframes spin{to{transform:rotateY(360deg)}}`}</style>
+
+      {!winner&&!flipping&&<button onClick={flipCoin} style={{padding:"12px 32px",background:"#3b82f6",border:"none",borderRadius:8,color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer"}}>Flip Coin</button>}
+
+      {winner&&(
+        <div style={{textAlign:"center",width:"100%",maxWidth:320}}>
+          <div style={{fontWeight:800,fontSize:18,color:"#34d399",marginBottom:4}}>{winnerName} wins the toss!</div>
+          <div style={{fontSize:13,color:"#64748b",marginBottom:16}}>Choose:</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
+            <button onClick={()=>setChoice("serve")} style={{padding:"14px",background:choice==="serve"?"#1d4ed8":"#111827",border:`2px solid ${choice==="serve"?"#3b82f6":"#334155"}`,borderRadius:10,color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}>
+              🎾 Serve First
+            </button>
+            <button onClick={()=>setChoice("receive")} style={{padding:"14px",background:choice==="receive"?"#1d4ed8":"#111827",border:`2px solid ${choice==="receive"?"#3b82f6":"#334155"}`,borderRadius:10,color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}>
+              🏃 Receive First
+            </button>
+          </div>
+          {choice&&<button onClick={confirm} style={{width:"100%",padding:"12px",background:"#10b981",border:"none",borderRadius:8,color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer"}}>
+            Start Match ▶
+          </button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose}) {
   const live = m.live || newLive();
   const sw = setsWon(live);
   const over = matchOver(live);
   const nameA = m.a, nameB = m.b;
+  const [showStats, setShowStats] = useState(false);
+  const canUndo = isKeeper && (live.history||[]).length > 0;
 
   const bigNum = {fontSize:56,fontWeight:900,lineHeight:1,color:"#fff"};
   const smallNum = {fontSize:22,fontWeight:700,color:"#64748b"};
+
   const setBox = (s,i) => (
     <div key={i} style={{textAlign:"center",background:"#0f172a",borderRadius:6,padding:"4px 10px",minWidth:48}}>
       <div style={{fontSize:13,fontWeight:700,color:s.a>s.b?"#34d399":"#94a3b8"}}>{s.a}</div>
@@ -227,45 +362,43 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose}) {
   return (
     <div style={{position:"fixed",inset:0,background:"#07090f",zIndex:1000,display:"flex",flexDirection:"column",overflowY:"auto"}}>
       {/* Header */}
-      <div style={{background:"#0a1020",borderBottom:"1px solid #1e293b",padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div style={{background:"#0a1020",borderBottom:"1px solid #1e293b",padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <div style={{width:8,height:8,borderRadius:"50%",background:"#ef4444",animation:"pulse 1s infinite"}}/>
           <span style={{color:"#ef4444",fontWeight:700,fontSize:13,letterSpacing:1}}>LIVE</span>
           <span style={{color:"#64748b",fontSize:12,marginLeft:4}}>{m.date}{m.time?` · ${m.time}`:""}</span>
+          {live.startTs&&<span style={{color:"#64748b",fontSize:11,marginLeft:4}}>· {fmt(Date.now()-live.startTs)}</span>}
         </div>
-        <button onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:20,cursor:"pointer"}}>×</button>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>setShowStats(v=>!v)} style={{background:"#1e293b",border:"none",borderRadius:6,color:"#64748b",cursor:"pointer",padding:"5px 10px",fontSize:12}}>📊</button>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:20,cursor:"pointer"}}>×</button>
+        </div>
       </div>
 
-      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px 16px",gap:24,maxWidth:500,margin:"0 auto",width:"100%"}}>
-
-        {/* Sets history */}
+      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px 16px",gap:20,maxWidth:500,margin:"0 auto",width:"100%"}}>
         {live.sets.length>0&&(
-          <div style={{display:"flex",gap:8}}>
-            {live.sets.map((s,i)=>setBox(s,i))}
-          </div>
+          <div style={{display:"flex",gap:8}}>{live.sets.map((s,i)=>setBox(s,i))}</div>
         )}
 
-        {/* Main scoreboard */}
+        {/* Scoreboard */}
         <div style={{width:"100%",background:"#0e1320",borderRadius:16,border:"1px solid #1e293b",overflow:"hidden"}}>
-          {/* Player A */}
           <div style={{padding:"20px 24px",borderBottom:"1px solid #1e293b",display:"flex",justifyContent:"space-between",alignItems:"center",background:sw.a>sw.b&&over?"#064e3b22":"transparent"}}>
             <div>
               <div style={{fontWeight:800,fontSize:18,color:sw.a>sw.b&&over?"#34d399":"#e2e8f0"}}>{nameA}</div>
-              <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{live.serving==="a"?"🎾 Serving":""}</div>
+              <div style={{fontSize:11,color:"#3b82f6",marginTop:2}}>{live.serving==="a"?"🎾 Serving":""}</div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:20}}>
               <div style={smallNum}>{sw.a}</div>
               <div style={{width:1,height:40,background:"#1e293b"}}/>
               {!over
-                ? <div style={{...bigNum,color:live.adv==="a"?"#34d399":live.adv==="b"?"#475569":"#fff"}}>{live.deuce&&live.adv==="a"?"Ad":live.deuce&&!live.adv?"40":live.deuce?"":displayPoints(live,"a")}</div>
+                ? <div style={{...bigNum,color:live.adv==="a"?"#34d399":live.adv==="b"?"#475569":"#fff"}}>{displayPoints(live,"a")}</div>
                 : <div style={{fontSize:28,fontWeight:900,color:sw.a>sw.b?"#34d399":"#64748b"}}>{sw.a>sw.b?"🏆":""}</div>
               }
             </div>
           </div>
 
-          {/* Games */}
           {!over&&(
-            <div style={{padding:"10px 24px",background:"#0a1020",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{padding:"8px 24px",background:"#0a1020",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:1}}>Games</div>
               <div style={{display:"flex",gap:4}}>
                 <span style={{fontWeight:800,fontSize:20,color:"#93c5fd"}}>{live.games.a}</span>
@@ -275,48 +408,48 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose}) {
             </div>
           )}
 
-          {/* Player B */}
           <div style={{padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"center",background:sw.b>sw.a&&over?"#064e3b22":"transparent"}}>
             <div>
               <div style={{fontWeight:800,fontSize:18,color:sw.b>sw.a&&over?"#34d399":"#e2e8f0"}}>{nameB}</div>
-              <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{live.serving==="b"?"🎾 Serving":""}</div>
+              <div style={{fontSize:11,color:"#3b82f6",marginTop:2}}>{live.serving==="b"?"🎾 Serving":""}</div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:20}}>
               <div style={smallNum}>{sw.b}</div>
               <div style={{width:1,height:40,background:"#1e293b"}}/>
               {!over
-                ? <div style={{...bigNum,color:live.adv==="b"?"#34d399":live.adv==="a"?"#475569":"#fff"}}>{live.deuce&&live.adv==="b"?"Ad":live.deuce&&!live.adv?"40":live.deuce?"":displayPoints(live,"b")}</div>
+                ? <div style={{...bigNum,color:live.adv==="b"?"#34d399":live.adv==="a"?"#475569":"#fff"}}>{displayPoints(live,"b")}</div>
                 : <div style={{fontSize:28,fontWeight:900,color:sw.b>sw.a?"#34d399":"#64748b"}}>{sw.b>sw.a?"🏆":""}</div>
               }
             </div>
           </div>
         </div>
 
-        {/* Deuce label */}
         {live.deuce&&!live.adv&&!over&&(
           <div style={{background:"#1e3a5f",color:"#93c5fd",fontWeight:700,fontSize:14,padding:"6px 20px",borderRadius:20,letterSpacing:2}}>DEUCE</div>
         )}
 
-        {/* Score keeper controls */}
-        {isKeeper && !over && (
+        {/* Keeper controls */}
+        {isKeeper&&!over&&(
           <div style={{width:"100%"}}>
-            <div style={{fontSize:11,color:"#64748b",textAlign:"center",marginBottom:12,textTransform:"uppercase",letterSpacing:1}}>Award Point To</div>
+            <div style={{fontSize:11,color:"#64748b",textAlign:"center",marginBottom:10,textTransform:"uppercase",letterSpacing:1}}>Award Point To</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-              <button onClick={()=>onPoint("a")} style={{padding:"18px",background:"linear-gradient(135deg,#1d4ed8,#2563eb)",border:"none",borderRadius:12,color:"#fff",fontWeight:800,fontSize:15,cursor:"pointer"}}>
+              <button onClick={()=>onPoint("a")} style={{padding:"20px",background:"linear-gradient(135deg,#1d4ed8,#2563eb)",border:"none",borderRadius:12,color:"#fff",fontWeight:800,fontSize:15,cursor:"pointer",active:{opacity:.8}}}>
                 {nameA}
               </button>
-              <button onClick={()=>onPoint("b")} style={{padding:"18px",background:"linear-gradient(135deg,#1d4ed8,#2563eb)",border:"none",borderRadius:12,color:"#fff",fontWeight:800,fontSize:15,cursor:"pointer"}}>
+              <button onClick={()=>onPoint("b")} style={{padding:"20px",background:"linear-gradient(135deg,#1d4ed8,#2563eb)",border:"none",borderRadius:12,color:"#fff",fontWeight:800,fontSize:15,cursor:"pointer"}}>
                 {nameB}
               </button>
             </div>
             <div style={{display:"flex",gap:10,marginTop:12,justifyContent:"center"}}>
-              <button onClick={onUndo} style={{...sbtn,fontSize:12}}>↩ Undo</button>
+              <button onClick={onUndo} disabled={!canUndo}
+                style={{...sbtn,fontSize:12,opacity:canUndo?1:.4,cursor:canUndo?"pointer":"not-allowed"}}>
+                ↩ Undo Last Point
+              </button>
             </div>
           </div>
         )}
 
-        {/* Match over — keeper ends it */}
-        {isKeeper && over && (
+        {isKeeper&&over&&(
           <div style={{textAlign:"center"}}>
             <div style={{color:"#34d399",fontWeight:700,fontSize:18,marginBottom:16}}>
               🏆 {sw.a>sw.b?nameA:nameB} wins!
@@ -327,16 +460,18 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose}) {
           </div>
         )}
 
-        {/* Viewer — just watching */}
-        {!isKeeper && over && (
+        {!isKeeper&&over&&(
           <div style={{textAlign:"center",color:"#34d399",fontWeight:700,fontSize:18}}>
             🏆 {sw.a>sw.b?nameA:nameB} wins!
           </div>
         )}
 
-        {!isKeeper && (
-          <div style={{fontSize:11,color:"#64748b",textAlign:"center"}}>👁 Viewing live — score updates every 5 seconds</div>
+        {!isKeeper&&(
+          <div style={{fontSize:11,color:"#64748b",textAlign:"center"}}>👁 Viewing live · updates every 5s</div>
         )}
+
+        {/* Stats panel */}
+        {showStats&&<MatchMetrics live={live} nameA={nameA} nameB={nameB}/>}
       </div>
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}`}</style>
     </div>
@@ -974,6 +1109,8 @@ export default function App() {
   const [modal,     setModal]     = useState(null);
   const [mf,        setMf]        = useState({});
   const [liveMatch, setLiveMatch] = useState(null); // {matchId, type, isKeeper}
+  const [showToss,  setShowToss]  = useState(false);
+  const [tossData,  setTossData]  = useState(null); // {matchId, type, m}
 
   const FUTURE      = futureDates();
   const defaultDate = FUTURE[0]||ALL_DATES[0];
@@ -993,9 +1130,12 @@ export default function App() {
     return ()=>clearInterval(t);
   },[liveMatch,load]);
 
-  async function upd(fn) {
-    const nd=fn(data); setData(nd); setStatus("saving");
-    await dbSave(nd); setStatus("ok");
+  function upd(fn) {
+    const nd=fn(data);
+    setData(nd);
+    setStatus("saving");
+    dbSave(nd).then(()=>setStatus("ok")).catch(()=>setStatus("error"));
+    return nd;
   }
 
   if(status==="loading") return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#64748b",fontSize:15}}>🎾 Loading…</div>;
@@ -1022,26 +1162,25 @@ export default function App() {
     return arr.find(m=>m.id===liveMatch.matchId)||null;
   }
 
-  async function handlePoint(side) {
+  function handlePoint(side) {
     const m = getCurrentLiveMatch(); if(!m) return;
     const live = addPoint(m.live||newLive(), side);
     const type = liveMatch.type;
-    await upd(d=>{
+    upd(d=>{
       const key=type==="doubles"?"dMatches":"sMatches";
       return {...d,[key]:d[key].map(x=>x.id===m.id?{...x,live}:x)};
     });
   }
 
-  async function handleUndo() {
-    // Simple undo: reset live score (restart current game)
+  function handleUndo() {
     const m = getCurrentLiveMatch(); if(!m) return;
-    const live = m.live||newLive();
-    // Just reset current game points
-    const newL = {...live, points:{a:0,b:0}, deuce:false, adv:null};
+    const live = m.live;
+    if (!live || !live.history || live.history.length===0) return;
+    const prev = undoPoint(live);
     const type = liveMatch.type;
-    await upd(d=>{
+    upd(d=>{
       const key=type==="doubles"?"dMatches":"sMatches";
-      return {...d,[key]:d[key].map(x=>x.id===m.id?{...x,live:newL}:x)};
+      return {...d,[key]:d[key].map(x=>x.id===m.id?{...x,live:prev}:x)};
     });
   }
 
@@ -1095,6 +1234,24 @@ export default function App() {
 
   const statusColor={ok:"#10b981",saving:"#f59e0b",error:"#ef4444"}[status]||"#64748b";
   const statusText ={ok:"✓ Saved",saving:"💾 Saving…",error:"⚠ Save failed"}[status];
+
+  // Show toss screen
+  if (showToss && tossData) {
+    const tm = (data.dMatches||[]).concat(data.sMatches||[]).find(x=>x.id===tossData.matchId);
+    if (tm) return (
+      <TossScreen
+        nameA={tm.a} nameB={tm.b}
+        onTossResult={(serving)=>{
+          upd(d=>{
+            const key=tossData.type==="doubles"?"dMatches":"sMatches";
+            return {...d,[key]:d[key].map(x=>x.id===tossData.matchId?{...x,live:newLive(serving)}:x)};
+          });
+          setShowToss(false);
+          setLiveMatch({matchId:tossData.matchId, type:tossData.type, isKeeper:true});
+        }}
+      />
+    );
+  }
 
   // Show live score overlay
   const liveMatchData = liveMatch ? getCurrentLiveMatch() : null;
@@ -1381,15 +1538,9 @@ export default function App() {
             <button onClick={()=>{
               const m=matches.find(x=>x.id===mf.matchId);
               if(!m) return;
-              // Init live state if not started
-              if(!m.live){
-                upd(d=>{
-                  const key=mf.matchType==="doubles"?"dMatches":"sMatches";
-                  return {...d,[key]:d[key].map(x=>x.id===mf.matchId?{...x,live:newLive()}:x)};
-                });
-              }
               setModal(null);
-              openLive(m, mf.matchType, true);
+              setTossData({matchId:mf.matchId, type:mf.matchType, m});
+              setShowToss(true);
             }} style={{...pbtn,justifyContent:"center",padding:"12px",fontSize:14}}>
               🎾 I am the Score Keeper
             </button>
