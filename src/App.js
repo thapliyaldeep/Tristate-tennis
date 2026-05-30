@@ -340,7 +340,7 @@ function TossScreen({nameA, nameB, onTossResult}) {
   );
 }
 
-function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose}) {
+function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHandoff}) {
   const live = m.live || newLive();
   const sw = setsWon(live);
   const over = matchOver(live);
@@ -351,11 +351,13 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose}) {
   const bigNum = {fontSize:56,fontWeight:900,lineHeight:1,color:"#fff"};
   const smallNum = {fontSize:22,fontWeight:700,color:"#64748b"};
 
-  const setBox = (s,i) => (
-    <div key={i} style={{textAlign:"center",background:"#0f172a",borderRadius:6,padding:"4px 10px",minWidth:48}}>
-      <div style={{fontSize:13,fontWeight:700,color:s.a>s.b?"#34d399":"#94a3b8"}}>{s.a}</div>
-      <div style={{fontSize:10,color:"#334155",margin:"1px 0"}}>—</div>
-      <div style={{fontSize:13,fontWeight:700,color:s.b>s.a?"#34d399":"#94a3b8"}}>{s.b}</div>
+  const setBox = (s,i,isCurrent) => (
+    <div key={i} style={{textAlign:"center",background:isCurrent?"#1e3a5f":"#0f172a",borderRadius:8,padding:"8px 14px",minWidth:60,border:isCurrent?"1px solid #3b82f655":"1px solid transparent"}}>
+      {isCurrent&&<div style={{fontSize:9,color:"#3b82f6",fontWeight:700,letterSpacing:1,marginBottom:4,textTransform:"uppercase"}}>Current</div>}
+      {!isCurrent&&<div style={{fontSize:9,color:"#475569",marginBottom:4}}>Set {i+1}</div>}
+      <div style={{fontSize:22,fontWeight:900,color:s.a>s.b?"#34d399":"#94a3b8",lineHeight:1}}>{s.a}</div>
+      <div style={{fontSize:11,color:"#334155",margin:"3px 0"}}>—</div>
+      <div style={{fontSize:22,fontWeight:900,color:s.b>s.a?"#34d399":"#94a3b8",lineHeight:1}}>{s.b}</div>
     </div>
   );
 
@@ -376,9 +378,10 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose}) {
       </div>
 
       <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px 16px",gap:20,maxWidth:500,margin:"0 auto",width:"100%"}}>
-        {live.sets.length>0&&(
-          <div style={{display:"flex",gap:8}}>{live.sets.map((s,i)=>setBox(s,i))}</div>
-        )}
+        <div style={{display:"flex",gap:8,alignItems:"flex-start",justifyContent:"center",flexWrap:"wrap"}}>
+          {live.sets.map((s,i)=>setBox(s,i,false))}
+          {!over&&setBox({a:live.games.a,b:live.games.b},live.sets.length,true)}
+        </div>
 
         {/* Scoreboard */}
         <div style={{width:"100%",background:"#0e1320",borderRadius:16,border:"1px solid #1e293b",overflow:"hidden"}}>
@@ -397,16 +400,7 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose}) {
             </div>
           </div>
 
-          {!over&&(
-            <div style={{padding:"8px 24px",background:"#0a1020",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div style={{fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:1}}>Games</div>
-              <div style={{display:"flex",gap:4}}>
-                <span style={{fontWeight:800,fontSize:20,color:"#93c5fd"}}>{live.games.a}</span>
-                <span style={{color:"#334155",fontSize:20}}>—</span>
-                <span style={{fontWeight:800,fontSize:20,color:"#93c5fd"}}>{live.games.b}</span>
-              </div>
-            </div>
-          )}
+
 
           <div style={{padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"center",background:sw.b>sw.a&&over?"#064e3b22":"transparent"}}>
             <div>
@@ -440,10 +434,14 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose}) {
                 {nameB}
               </button>
             </div>
-            <div style={{display:"flex",gap:10,marginTop:12,justifyContent:"center"}}>
+            <div style={{display:"flex",gap:10,marginTop:12,justifyContent:"center",flexWrap:"wrap"}}>
               <button onClick={onUndo} disabled={!canUndo}
                 style={{...sbtn,fontSize:12,opacity:canUndo?1:.4,cursor:canUndo?"pointer":"not-allowed"}}>
                 ↩ Undo Last Point
+              </button>
+              <button onClick={onHandoff}
+                style={{...sbtn,fontSize:12,color:"#f59e0b",borderColor:"#f59e0b44"}}>
+                🔁 Hand Off Scoring
               </button>
             </div>
           </div>
@@ -467,7 +465,13 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose}) {
         )}
 
         {!isKeeper&&(
-          <div style={{fontSize:11,color:"#64748b",textAlign:"center"}}>👁 Viewing live · updates every 5s</div>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>👁 Viewing live · updates every 5s</div>
+            {!over&&<button onClick={onHandoff}
+              style={{padding:"8px 18px",background:"#1e293b",border:"1px solid #f59e0b55",borderRadius:7,color:"#f59e0b",fontSize:12,cursor:"pointer",fontWeight:600}}>
+              🎾 Take Over as Score Keeper
+            </button>}
+          </div>
         )}
 
         {/* Stats panel */}
@@ -1290,6 +1294,7 @@ export default function App() {
         onUndo={handleUndo}
         onEndMatch={handleEndMatch}
         onClose={()=>setLiveMatch(null)}
+        onHandoff={()=>setLiveMatch(lm=>({...lm, isKeeper:!lm.isKeeper}))}
       />
     );
   }
