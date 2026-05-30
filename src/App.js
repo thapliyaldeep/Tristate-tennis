@@ -127,8 +127,8 @@ function addPoint(live, who) {
 function undoPoint(live) {
   if (!live.history || live.history.length===0) return live;
   const prev = live.history[live.history.length-1];
-  // Restore previous state but keep full history minus last entry
-  return {...prev, history: live.history.slice(0,-1)};
+  // Restore previous state but keep current keeperId and trimmed history
+  return {...prev, history: live.history.slice(0,-1), keeperId: live.keeperId};
 }
 
 function winGame(live, who) {
