@@ -479,10 +479,21 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
             <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>👁 Viewing live · updates every 5s</div>
             {!over&&(keeperActive
               ? <div style={{fontSize:11,color:"#64748b",marginTop:4}}>🔒 Score is being kept by another device</div>
-              : <button onClick={onHandoff}
-                  style={{padding:"8px 18px",background:"#1e293b",border:"1px solid #f59e0b55",borderRadius:7,color:"#f59e0b",fontSize:12,cursor:"pointer",fontWeight:600}}>
-                  🎾 Take Over as Score Keeper
-                </button>
+              : <button onClick={async ()=>{
+                  // Always fetch fresh from Firebase before allowing takeover
+                  const fresh = await dbLoad();
+                  if (!fresh) { alert("Could not verify. Try again."); return; }
+                  const allM = [...(fresh.dMatches||[]),...(fresh.sMatches||[])];
+                  const fm = allM.find(x=>x.id===m.id);
+                  if (fm?.live?.keeperId && fm.live.keeperId !== myDeviceId) {
+                    alert("Another device is already keeping score!");
+                    return;
+                  }
+                  onHandoff();
+                }}
+                style={{padding:"8px 18px",background:"#1e293b",border:"1px solid #f59e0b55",borderRadius:7,color:"#f59e0b",fontSize:12,cursor:"pointer",fontWeight:600}}>
+                🎾 Take Over as Score Keeper
+              </button>
             )}
           </div>
         )}
