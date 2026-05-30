@@ -349,8 +349,9 @@ function TossScreen({nameA, nameB, onTossResult}) {
   );
 }
 
-function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHandoff}) {
+function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHandoff, myDeviceId}) {
   const live = m.live || newLive();
+  const keeperActive = !!live.keeperId && live.keeperId !== myDeviceId;
   const sw = setsWon(live);
   const over = matchOver(live);
   const nameA = m.a, nameB = m.b;
@@ -476,16 +477,13 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
         {!isKeeper&&(
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>👁 Viewing live · updates every 5s</div>
-            {!over&&(()=>{
-              const keeperId = live.keeperId;
-              const hasKeeper = !!keeperId;
-              return hasKeeper
-                ? <div style={{fontSize:11,color:"#64748b",marginTop:4}}>🔒 {" "}Score is being kept by another device</div>
-                : <button onClick={onHandoff}
-                    style={{padding:"8px 18px",background:"#1e293b",border:"1px solid #f59e0b55",borderRadius:7,color:"#f59e0b",fontSize:12,cursor:"pointer",fontWeight:600}}>
-                    🎾 Take Over as Score Keeper
-                  </button>;
-            })()}
+            {!over&&(keeperActive
+              ? <div style={{fontSize:11,color:"#64748b",marginTop:4}}>🔒 Score is being kept by another device</div>
+              : <button onClick={onHandoff}
+                  style={{padding:"8px 18px",background:"#1e293b",border:"1px solid #f59e0b55",borderRadius:7,color:"#f59e0b",fontSize:12,cursor:"pointer",fontWeight:600}}>
+                  🎾 Take Over as Score Keeper
+                </button>
+            )}
           </div>
         )}
 
@@ -1310,6 +1308,7 @@ export default function App() {
       <LiveScoreView
         m={liveMatchData}
         isKeeper={amActualKeeper}
+        myDeviceId={DEVICE_ID}
         onPoint={handlePoint}
         onUndo={handleUndo}
         onEndMatch={handleEndMatch}
@@ -1330,8 +1329,14 @@ export default function App() {
             // No keeper — this device claims it
             upd(d=>{
               const key=type==="doubles"?"dMatches":"sMatches";
+              // Double-check in the latest data that keeperId is still null
+              const latest = d[type==="doubles"?"dMatches":"sMatches"].find(x=>x.id===m.id);
+              if (latest?.live?.keeperId) return d; // someone else grabbed it first
               return {...d,[key]:d[key].map(x=>x.id===m.id?{...x,live:{...x.live,keeperId:DEVICE_ID}}:x)};
             });
+          } else {
+            // Another device is keeping score — block
+            alert("Another device is already keeping score for this match!");
           }
         }}
       />
