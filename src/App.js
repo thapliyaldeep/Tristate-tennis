@@ -2,6 +2,15 @@ import { useState, useEffect, useCallback } from "react";
 
 const FB_URL = "https://tristate-tennis-default-rtdb.firebaseio.com/state.json";
 
+// Stable device ID — set once at module load, persists in localStorage
+const DEVICE_ID = (() => {
+  try {
+    let id = localStorage.getItem("tristate_device_id");
+    if (!id) { id = Math.random().toString(36).slice(2); localStorage.setItem("tristate_device_id", id); }
+    return id;
+  } catch { return Math.random().toString(36).slice(2); }
+})();
+
 async function dbLoad() {
   try {
     const r = await fetch(FB_URL);
@@ -1198,12 +1207,7 @@ export default function App() {
     return arr.find(m=>m.id===liveMatch.matchId)||null;
   }
 
-  // Device ID stored in localStorage to identify this scorekeeper
-  const DEVICE_ID = (() => {
-    let id = localStorage.getItem("tristate_device_id");
-    if (!id) { id = Math.random().toString(36).slice(2); localStorage.setItem("tristate_device_id", id); }
-    return id;
-  })();
+
 
   function handlePoint(side) {
     const m = getCurrentLiveMatch(); if(!m) return;
@@ -1299,11 +1303,13 @@ export default function App() {
 
   // Show live score overlay
   const liveMatchData = liveMatch ? getCurrentLiveMatch() : null;
+  // Always derive isKeeper from Firebase data (keeperId), not local state
+  const amActualKeeper = liveMatchData?.live?.keeperId === DEVICE_ID;
   if (liveMatch && liveMatchData) {
     return (
       <LiveScoreView
         m={liveMatchData}
-        isKeeper={liveMatch.isKeeper}
+        isKeeper={amActualKeeper}
         onPoint={handlePoint}
         onUndo={handleUndo}
         onEndMatch={handleEndMatch}
@@ -1312,20 +1318,20 @@ export default function App() {
           const m = getCurrentLiveMatch();
           if (!m || !m.live) return;
           const type = liveMatch.type;
-          if (liveMatch.isKeeper) {
+          const myKeeperId = m.live?.keeperId;
+          const iAmKeeper = myKeeperId === DEVICE_ID;
+          if (iAmKeeper) {
             // Current keeper hands off — clear keeperId
             upd(d=>{
               const key=type==="doubles"?"dMatches":"sMatches";
               return {...d,[key]:d[key].map(x=>x.id===m.id?{...x,live:{...x.live,keeperId:null}}:x)};
             });
-            setLiveMatch(lm=>({...lm,isKeeper:false}));
-          } else {
-            // Viewer wants to take over — claim keeperId
+          } else if (!myKeeperId) {
+            // No keeper — this device claims it
             upd(d=>{
               const key=type==="doubles"?"dMatches":"sMatches";
               return {...d,[key]:d[key].map(x=>x.id===m.id?{...x,live:{...x.live,keeperId:DEVICE_ID}}:x)};
             });
-            setLiveMatch(lm=>({...lm,isKeeper:true}));
           }
         }}
       />
@@ -1612,7 +1618,9 @@ export default function App() {
               const m=matches.find(x=>x.id===mf.matchId);
               if(!m) return;
               setModal(null);
-              openLive(m, mf.matchType, false);
+              // isKeeper determined by whether this device holds the keeperId
+              const amKeeper = m.live && m.live.keeperId === DEVICE_ID;
+              openLive(m, mf.matchType, amKeeper);
             }} style={{...sbtn,justifyContent:"center",padding:"12px",fontSize:14,color:"#93c5fd"}}>
               👁 Watch Live
             </button>
