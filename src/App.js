@@ -467,10 +467,16 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
         {!isKeeper&&(
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>👁 Viewing live · updates every 5s</div>
-            {!over&&<button onClick={onHandoff}
-              style={{padding:"8px 18px",background:"#1e293b",border:"1px solid #f59e0b55",borderRadius:7,color:"#f59e0b",fontSize:12,cursor:"pointer",fontWeight:600}}>
-              🎾 Take Over as Score Keeper
-            </button>}
+            {!over&&(()=>{
+              const keeperId = live.keeperId;
+              const hasKeeper = !!keeperId;
+              return hasKeeper
+                ? <div style={{fontSize:11,color:"#64748b",marginTop:4}}>🔒 {" "}Score is being kept by another device</div>
+                : <button onClick={onHandoff}
+                    style={{padding:"8px 18px",background:"#1e293b",border:"1px solid #f59e0b55",borderRadius:7,color:"#f59e0b",fontSize:12,cursor:"pointer",fontWeight:600}}>
+                    🎾 Take Over as Score Keeper
+                  </button>;
+            })()}
           </div>
         )}
 
@@ -1192,6 +1198,13 @@ export default function App() {
     return arr.find(m=>m.id===liveMatch.matchId)||null;
   }
 
+  // Device ID stored in localStorage to identify this scorekeeper
+  const DEVICE_ID = (() => {
+    let id = localStorage.getItem("tristate_device_id");
+    if (!id) { id = Math.random().toString(36).slice(2); localStorage.setItem("tristate_device_id", id); }
+    return id;
+  })();
+
   function handlePoint(side) {
     const m = getCurrentLiveMatch(); if(!m) return;
     const live = addPoint(m.live||newLive(), side);
@@ -1274,7 +1287,8 @@ export default function App() {
         onTossResult={(serving)=>{
           upd(d=>{
             const key=tossData.type==="doubles"?"dMatches":"sMatches";
-            return {...d,[key]:d[key].map(x=>x.id===tossData.matchId?{...x,live:newLive(serving)}:x)};
+            const lv = {...newLive(serving), keeperId: DEVICE_ID};
+            return {...d,[key]:d[key].map(x=>x.id===tossData.matchId?{...x,live:lv}:x)};
           });
           setShowToss(false);
           setLiveMatch({matchId:tossData.matchId, type:tossData.type, isKeeper:true});
@@ -1294,7 +1308,26 @@ export default function App() {
         onUndo={handleUndo}
         onEndMatch={handleEndMatch}
         onClose={()=>setLiveMatch(null)}
-        onHandoff={()=>setLiveMatch(lm=>({...lm, isKeeper:!lm.isKeeper}))}
+        onHandoff={()=>{
+          const m = getCurrentLiveMatch();
+          if (!m || !m.live) return;
+          const type = liveMatch.type;
+          if (liveMatch.isKeeper) {
+            // Current keeper hands off — clear keeperId
+            upd(d=>{
+              const key=type==="doubles"?"dMatches":"sMatches";
+              return {...d,[key]:d[key].map(x=>x.id===m.id?{...x,live:{...x.live,keeperId:null}}:x)};
+            });
+            setLiveMatch(lm=>({...lm,isKeeper:false}));
+          } else {
+            // Viewer wants to take over — claim keeperId
+            upd(d=>{
+              const key=type==="doubles"?"dMatches":"sMatches";
+              return {...d,[key]:d[key].map(x=>x.id===m.id?{...x,live:{...x.live,keeperId:DEVICE_ID}}:x)};
+            });
+            setLiveMatch(lm=>({...lm,isKeeper:true}));
+          }
+        }}
       />
     );
   }
