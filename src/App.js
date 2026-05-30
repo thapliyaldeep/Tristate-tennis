@@ -1617,32 +1617,47 @@ export default function App() {
           </div>
         </Modal>
       )}
-      {modal==="livemode"&&(
-        <Modal title="Start Live Scoring" onClose={()=>setModal(null)}>
-          <div style={{fontSize:13,color:"#94a3b8",marginBottom:16}}>Are you the score keeper or a viewer?</div>
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            <button onClick={()=>{
-              const m=matches.find(x=>x.id===mf.matchId);
-              if(!m) return;
-              setModal(null);
-              setTossData({matchId:mf.matchId, type:mf.matchType, m});
-              setShowToss(true);
-            }} style={{...pbtn,justifyContent:"center",padding:"12px",fontSize:14}}>
-              🎾 I am the Score Keeper
-            </button>
-            <button onClick={()=>{
-              const m=matches.find(x=>x.id===mf.matchId);
-              if(!m) return;
-              setModal(null);
-              // isKeeper determined by whether this device holds the keeperId
-              const amKeeper = m.live && m.live.keeperId === DEVICE_ID;
-              openLive(m, mf.matchType, amKeeper);
-            }} style={{...sbtn,justifyContent:"center",padding:"12px",fontSize:14,color:"#93c5fd"}}>
-              👁 Watch Live
-            </button>
-          </div>
-        </Modal>
-      )}
+      {modal==="livemode"&&(()=>{
+        const m = matches.find(x=>x.id===mf.matchId);
+        if (!m) return null;
+        const alreadyLive  = !!m.live?.keeperId;
+        const iAmKeeper    = m.live?.keeperId === DEVICE_ID;
+        const matchStarted = !!m.live;
+        return (
+          <Modal title="Live Scoring" onClose={()=>setModal(null)}>
+            {alreadyLive && !iAmKeeper && (
+              <div style={{background:"#1a0a0a",border:"1px solid #ef444433",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#f87171"}}>
+                ⚠️ This match is already being scored by another device
+              </div>
+            )}
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {/* Only show keeper button if no one is keeping yet, or this device is the keeper */}
+              {(!alreadyLive || iAmKeeper) && (
+                <button onClick={()=>{
+                  if(alreadyLive && iAmKeeper) {
+                    // Resume as keeper
+                    setModal(null);
+                    openLive(m, mf.matchType, true);
+                  } else if (!alreadyLive) {
+                    // Start fresh with toss
+                    setModal(null);
+                    setTossData({matchId:mf.matchId, type:mf.matchType, m});
+                    setShowToss(true);
+                  }
+                }} style={{...pbtn,justifyContent:"center",padding:"12px",fontSize:14}}>
+                  🎾 {iAmKeeper ? "Resume Scoring" : "I am the Score Keeper"}
+                </button>
+              )}
+              <button onClick={()=>{
+                setModal(null);
+                openLive(m, mf.matchType, false);
+              }} style={{...sbtn,justifyContent:"center",padding:"12px",fontSize:14,color:"#93c5fd"}}>
+                👁 {matchStarted ? "Watch Live" : "Observe Match"}
+              </button>
+            </div>
+          </Modal>
+        );
+      })()}
       {modal==="avail"&&(
         <Modal title={`Add Availability — ${mf.name}`} onClose={()=>setModal(null)}>
           <label style={lbl}>Date</label>
