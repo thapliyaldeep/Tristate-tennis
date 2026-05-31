@@ -1375,12 +1375,10 @@ function LoginPage({ onLogin }) {
             marginBottom:44,
             animation:"fadeUp .7s .3s ease both", opacity:0, animationFillMode:"both",
           }}>
-            {[["8","Doubles
-Teams"],["10","Singles
-Players"],["2","Leagues"]].map(([n,l])=>(
+            {[["8","Doubles Teams"],["10","Singles Players"],["2","Leagues"]].map(([n,l])=>(
               <div key={l} style={{textAlign:"center"}}>
                 <div style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(30px,5vw,44px)",fontWeight:900,color:"#4ade80",lineHeight:1}}>{n}</div>
-                <div style={{fontSize:10,color:"rgba(255,255,255,.3)",letterSpacing:2,textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",marginTop:6,lineHeight:1.4,whiteSpace:"pre-line"}}>{l}</div>
+                <div style={{fontSize:10,color:"rgba(255,255,255,.3)",letterSpacing:2,textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",marginTop:6,lineHeight:1.4}}>{l}</div>
               </div>
             ))}
           </div>
