@@ -1131,46 +1131,98 @@ function PollsTab({data, upd, allPlayers}) {
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 const CREDENTIALS = {
-  // Doubles players
-  "nitin":    "TriTennis$$1",
-  "ashish":   "TriTennis$$1",
-  "jai":      "TriTennis$$1",
-  "deep":     "TriTennis$$1",
-  "tarun":    "TriTennis$$1",
-  "sumit":    "TriTennis$$1",
-  "bobby":    "TriTennis$$1",
-  "satendra": "TriTennis$$1",
-  "akash":    "TriTennis$$1",
-  "micky":    "TriTennis$$1",
-  "dhar":     "TriTennis$$1",
-  "vineet":   "TriTennis$$1",
-  "sanjay":   "TriTennis$$1",
-  "ravi":     "TriTennis$$1",
-  "shailesh": "TriTennis$$1",
-  "uzair":    "TriTennis$$1",
-  // Singles players
-  "pratyush": "TriTennis$$1",
-  "viraj":    "TriTennis$$1",
-  "tushar":   "TriTennis$$1",
-  // Admin
-  "admin":    "TriTennis$$1",
+  "nitin":"TriTennis$$1","ashish":"TriTennis$$1","jai":"TriTennis$$1","deep":"TriTennis$$1",
+  "tarun":"TriTennis$$1","sumit":"TriTennis$$1","bobby":"TriTennis$$1","satendra":"TriTennis$$1",
+  "akash":"TriTennis$$1","micky":"TriTennis$$1","dhar":"TriTennis$$1","vineet":"TriTennis$$1",
+  "sanjay":"TriTennis$$1","ravi":"TriTennis$$1","shailesh":"TriTennis$$1","uzair":"TriTennis$$1",
+  "pratyush":"TriTennis$$1","viraj":"TriTennis$$1","tushar":"TriTennis$$1","admin":"TriTennis$$1",
 };
-
 const AUTH_KEY = "tristate_auth";
+function getAuth() { try { return JSON.parse(sessionStorage.getItem(AUTH_KEY)||"null"); } catch { return null; } }
+function setAuth(u) { try { sessionStorage.setItem(AUTH_KEY, JSON.stringify(u)); } catch {} }
+function clearAuth() { try { sessionStorage.removeItem(AUTH_KEY); } catch {} }
 
-function getAuth() {
-  try { return JSON.parse(sessionStorage.getItem(AUTH_KEY)||"null"); } catch { return null; }
-}
-function setAuth(user) {
-  try { sessionStorage.setItem(AUTH_KEY, JSON.stringify(user)); } catch {}
-}
-function clearAuth() {
-  try { sessionStorage.removeItem(AUTH_KEY); } catch {}
+// ── SVG Player Silhouettes ────────────────────────────────────────────────────
+function PlayerLeft() {
+  // Serve stance silhouette
+  return (
+    <svg viewBox="0 0 120 220" style={{width:"100%",height:"100%",filter:"drop-shadow(0 0 24px rgba(74,222,128,0.25))"}}>
+      <g fill="rgba(255,255,255,0.12)" stroke="rgba(74,222,128,0.3)" strokeWidth="0.5">
+        {/* Head */}
+        <circle cx="60" cy="22" r="13"/>
+        {/* Body */}
+        <path d="M48 35 Q60 32 72 35 L76 90 Q60 95 44 90 Z"/>
+        {/* Left arm up (serving) */}
+        <path d="M48 45 Q30 30 18 10 Q22 8 26 10 Q36 28 50 44 Z"/>
+        {/* Right arm with racket */}
+        <path d="M72 45 Q90 35 108 25 Q110 29 108 32 Q90 42 74 50 Z"/>
+        {/* Racket head */}
+        <ellipse cx="112" cy="22" rx="10" ry="13" fill="none" stroke="rgba(74,222,128,0.5)" strokeWidth="2"/>
+        <line x1="102" y1="22" x2="122" y2="22" stroke="rgba(74,222,128,0.3)" strokeWidth="0.5"/>
+        <line x1="112" y1="9" x2="112" y2="35" stroke="rgba(74,222,128,0.3)" strokeWidth="0.5"/>
+        {/* Left leg */}
+        <path d="M50 90 Q44 130 40 160 Q44 162 50 160 Q54 132 58 92 Z"/>
+        {/* Right leg */}
+        <path d="M70 90 Q76 130 80 160 Q76 162 70 160 Q66 132 62 92 Z"/>
+        {/* Shoes */}
+        <ellipse cx="44" cy="163" rx="10" ry="4"/>
+        <ellipse cx="76" cy="163" rx="10" ry="4"/>
+      </g>
+    </svg>
+  );
 }
 
-// ─── Landing / Login Page ─────────────────────────────────────────────────────
+function PlayerRight() {
+  // Forehand swing silhouette (mirrored)
+  return (
+    <svg viewBox="0 0 120 220" style={{width:"100%",height:"100%",transform:"scaleX(-1)",filter:"drop-shadow(0 0 24px rgba(250,204,21,0.2))"}}>
+      <g fill="rgba(255,255,255,0.10)" stroke="rgba(250,204,21,0.25)" strokeWidth="0.5">
+        {/* Head */}
+        <circle cx="60" cy="22" r="13"/>
+        {/* Body crouched forward */}
+        <path d="M46 35 Q60 30 74 35 L80 88 Q60 96 40 88 Z"/>
+        {/* Right arm swinging */}
+        <path d="M74 50 Q95 60 115 55 Q116 60 114 63 Q93 68 72 58 Z"/>
+        {/* Racket */}
+        <ellipse cx="118" cy="58" rx="9" ry="12" fill="none" stroke="rgba(250,204,21,0.5)" strokeWidth="2"/>
+        <line x1="109" y1="58" x2="127" y2="58" stroke="rgba(250,204,21,0.3)" strokeWidth="0.5"/>
+        <line x1="118" y1="46" x2="118" y2="70" stroke="rgba(250,204,21,0.3)" strokeWidth="0.5"/>
+        {/* Left arm balance */}
+        <path d="M46 45 Q28 40 14 45 Q13 50 16 52 Q29 46 48 52 Z"/>
+        {/* Legs wide stance */}
+        <path d="M46 88 Q36 128 30 160 Q36 163 42 160 Q46 130 54 90 Z"/>
+        <path d="M74 88 Q84 128 90 160 Q84 163 78 160 Q74 130 66 90 Z"/>
+        {/* Shoes */}
+        <ellipse cx="34" cy="163" rx="11" ry="4"/>
+        <ellipse cx="86" cy="163" rx="11" ry="4"/>
+      </g>
+    </svg>
+  );
+}
+
+function TennisBall({size=60, glow=true}) {
+  return (
+    <svg viewBox="0 0 100 100" width={size} height={size}>
+      <defs>
+        <radialGradient id="ballGrad" cx="35%" cy="30%" r="65%">
+          <stop offset="0%" stopColor="#d9f99d"/>
+          <stop offset="50%" stopColor="#84cc16"/>
+          <stop offset="100%" stopColor="#4d7c0f"/>
+        </radialGradient>
+        {glow && <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>}
+      </defs>
+      <circle cx="50" cy="50" r="48" fill="url(#ballGrad)" filter={glow?"url(#glow)":undefined}/>
+      {/* Seam curves */}
+      <path d="M20 35 Q50 50 80 35" fill="none" stroke="white" strokeWidth="3" strokeOpacity="0.6"/>
+      <path d="M20 65 Q50 50 80 65" fill="none" stroke="white" strokeWidth="3" strokeOpacity="0.6"/>
+      <path d="M35 20 Q50 50 35 80" fill="none" stroke="white" strokeWidth="3" strokeOpacity="0.6"/>
+      <path d="M65 20 Q50 50 65 80" fill="none" stroke="white" strokeWidth="3" strokeOpacity="0.6"/>
+    </svg>
+  );
+}
+
 function LoginPage({ onLogin }) {
-  const [phase, setPhase]       = useState("landing"); // landing | login
+  const [phase, setPhase]       = useState("landing");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError]       = useState("");
@@ -1179,244 +1231,257 @@ function LoginPage({ onLogin }) {
 
   function handleLogin(e) {
     e.preventDefault();
-    setLoading(true);
-    setError("");
+    setLoading(true); setError("");
     setTimeout(() => {
       const u = username.trim().toLowerCase();
       if (CREDENTIALS[u] && CREDENTIALS[u] === password) {
-        setAuth({ username: u });
-        onLogin(u);
+        setAuth({ username: u }); onLogin(u);
       } else {
-        setError("Invalid username or password");
-        setLoading(false);
+        setError("Invalid username or password"); setLoading(false);
       }
-    }, 600);
+    }, 700);
   }
-
-  // ── Animated tennis ball positions
-  const balls = [
-    { top:"8%",  left:"12%",  size:12, delay:0,    dur:8  },
-    { top:"20%", left:"78%",  size:8,  delay:1.2,  dur:11 },
-    { top:"55%", left:"5%",   size:10, delay:2.5,  dur:9  },
-    { top:"70%", left:"88%",  size:14, delay:0.8,  dur:13 },
-    { top:"85%", left:"35%",  size:7,  delay:3.1,  dur:10 },
-    { top:"40%", left:"92%",  size:9,  delay:1.7,  dur:7  },
-    { top:"15%", left:"50%",  size:6,  delay:4.0,  dur:12 },
-    { top:"90%", left:"60%",  size:11, delay:2.2,  dur:9  },
-  ];
 
   return (
     <div style={{
-      minHeight:"100vh", background:"#020817",
-      display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-      position:"relative", overflow:"hidden", fontFamily:"'Georgia', 'Times New Roman', serif",
+      minHeight:"100vh", background:"#050a12",
+      display:"flex", flexDirection:"column",
+      fontFamily:"'Georgia','Times New Roman',serif",
+      position:"relative", overflow:"hidden",
     }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500&display=swap');
-        @keyframes float { 0%,100%{transform:translateY(0) rotate(0deg)} 50%{transform:translateY(-20px) rotate(180deg)} }
-        @keyframes fadeUp { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=DM+Sans:wght@300;400;500&display=swap');
+        @keyframes floatBall { 0%,100%{transform:translateY(0) rotate(0deg)} 50%{transform:translateY(-18px) rotate(200deg)} }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes fadeIn { from{opacity:0} to{opacity:1} }
         @keyframes shimmer { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }
-        @keyframes pulse2 { 0%,100%{opacity:.6;transform:scale(1)} 50%{opacity:1;transform:scale(1.05)} }
+        @keyframes scanline { 0%{transform:translateY(-100%)} 100%{transform:translateY(100vh)} }
+        @keyframes pulse3 { 0%,100%{opacity:.5;transform:scale(1)} 50%{opacity:1;transform:scale(1.08)} }
         @keyframes spin { to{transform:rotate(360deg)} }
-        .login-input:focus { border-color:#4ade80 !important; outline:none; box-shadow:0 0 0 3px #4ade8022; }
-        .enter-btn:hover { transform:translateY(-2px); box-shadow:0 12px 40px #4ade8033; }
-        .enter-btn:active { transform:translateY(0); }
-        .back-btn:hover { color:#fff !important; }
+        @keyframes slideLeft { from{opacity:0;transform:translateX(-40px)} to{opacity:1;transform:translateX(0)} }
+        @keyframes slideRight { from{opacity:0;transform:translateX(40px)} to{opacity:1;transform:translateX(0)} }
+        .login-input { transition:border-color .2s,box-shadow .2s !important; }
+        .login-input:focus { border-color:#4ade80 !important; outline:none !important; box-shadow:0 0 0 3px rgba(74,222,128,.15) !important; }
+        .enter-btn { transition:all .2s !important; }
+        .enter-btn:hover:not(:disabled) { transform:translateY(-2px) !important; box-shadow:0 16px 48px rgba(74,222,128,.35) !important; }
+        .enter-btn:active:not(:disabled) { transform:translateY(0) !important; }
       `}</style>
 
-      {/* Animated background grid */}
-      <div style={{
-        position:"absolute", inset:0, zIndex:0,
-        backgroundImage:`linear-gradient(rgba(74,222,128,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(74,222,128,.04) 1px,transparent 1px)`,
-        backgroundSize:"60px 60px",
-      }}/>
-
-      {/* Radial glow */}
-      <div style={{
-        position:"absolute", top:"30%", left:"50%", transform:"translate(-50%,-50%)",
-        width:600, height:600, borderRadius:"50%",
-        background:"radial-gradient(circle,rgba(74,222,128,.08) 0%,transparent 70%)",
-        zIndex:0,
-      }}/>
-
-      {/* Floating tennis balls */}
-      {balls.map((b,i)=>(
-        <div key={i} style={{
-          position:"absolute", top:b.top, left:b.left, zIndex:1,
-          width:b.size, height:b.size, borderRadius:"50%",
-          background:"radial-gradient(circle at 35% 35%, #bef264, #84cc16)",
-          boxShadow:`0 0 ${b.size*2}px rgba(132,204,22,.4)`,
-          animation:`float ${b.dur}s ${b.delay}s ease-in-out infinite`,
-          opacity:.7,
-        }}/>
-      ))}
-
-      {/* Court lines decoration */}
-      <div style={{position:"absolute",inset:0,zIndex:0,opacity:.06}}>
-        <div style={{position:"absolute",top:"50%",left:0,right:0,height:1,background:"#4ade80"}}/>
-        <div style={{position:"absolute",top:0,bottom:0,left:"50%",width:1,background:"#4ade80"}}/>
-        <div style={{position:"absolute",top:"20%",left:"15%",right:"15%",height:1,background:"#4ade80"}}/>
-        <div style={{position:"absolute",top:"80%",left:"15%",right:"15%",height:1,background:"#4ade80"}}/>
-        <div style={{position:"absolute",top:"20%",bottom:"20%",left:"15%",width:1,background:"#4ade80"}}/>
-        <div style={{position:"absolute",top:"20%",bottom:"20%",right:"15%",width:1,background:"#4ade80"}}/>
+      {/* ── Court background ── */}
+      <div style={{position:"absolute",inset:0,zIndex:0}}>
+        {/* Base gradient */}
+        <div style={{position:"absolute",inset:0,background:"linear-gradient(160deg,#050a12 0%,#071a10 40%,#050e1a 70%,#050a12 100%)"}}/>
+        {/* Court surface */}
+        <div style={{position:"absolute",bottom:0,left:0,right:0,height:"45%",background:"linear-gradient(180deg,transparent,rgba(20,83,45,.12))"}}/>
+        {/* Court lines */}
+        <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:.07}} viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+          {/* Baseline */}
+          <line x1="120" y1="720" x2="1320" y2="720" stroke="#4ade80" strokeWidth="2"/>
+          {/* Singles sidelines */}
+          <line x1="120" y1="180" x2="120" y2="720" stroke="#4ade80" strokeWidth="2"/>
+          <line x1="1320" y1="180" x2="1320" y2="720" stroke="#4ade80" strokeWidth="2"/>
+          {/* Service line */}
+          <line x1="120" y1="450" x2="1320" y2="450" stroke="#4ade80" strokeWidth="2"/>
+          {/* Center service line */}
+          <line x1="720" y1="180" x2="720" y2="720" stroke="#4ade80" strokeWidth="2"/>
+          {/* Net */}
+          <line x1="120" y1="180" x2="1320" y2="180" stroke="#4ade80" strokeWidth="3"/>
+          {/* Net posts */}
+          <line x1="120" y1="130" x2="120" y2="180" stroke="#4ade80" strokeWidth="4"/>
+          <line x1="1320" y1="130" x2="1320" y2="180" stroke="#4ade80" strokeWidth="4"/>
+          {/* Net mesh */}
+          {Array.from({length:20}).map((_,i)=>(
+            <line key={i} x1={120+i*60} y1="130" x2={120+i*60} y2="180" stroke="#4ade80" strokeWidth="0.5" opacity="0.5"/>
+          ))}
+        </svg>
+        {/* Ambient glow left */}
+        <div style={{position:"absolute",top:"20%",left:"-10%",width:500,height:600,borderRadius:"50%",background:"radial-gradient(circle,rgba(74,222,128,.06),transparent 70%)"}}/>
+        {/* Ambient glow right */}
+        <div style={{position:"absolute",top:"15%",right:"-10%",width:500,height:600,borderRadius:"50%",background:"radial-gradient(circle,rgba(250,204,21,.04),transparent 70%)"}}/>
+        {/* Scanline effect */}
+        <div style={{position:"absolute",inset:0,background:"repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.03) 3px,rgba(0,0,0,.03) 4px)",pointerEvents:"none"}}/>
       </div>
 
-      {/* Main content */}
-      <div style={{position:"relative",zIndex:2,textAlign:"center",padding:"0 24px",maxWidth:560,width:"100%"}}>
-
-        {phase === "landing" && (
-          <div style={{animation:"fadeUp .8s ease both"}}>
-            {/* Badge */}
-            <div style={{
-              display:"inline-flex", alignItems:"center", gap:8,
-              background:"rgba(74,222,128,.1)", border:"1px solid rgba(74,222,128,.3)",
-              borderRadius:100, padding:"6px 16px", marginBottom:32,
-              animation:"pulse2 3s ease infinite",
-            }}>
-              <div style={{width:6,height:6,borderRadius:"50%",background:"#4ade80"}}/>
-              <span style={{fontSize:11,color:"#4ade80",letterSpacing:3,textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>Season 2026</span>
-            </div>
-
-            {/* Title */}
-            <h1 style={{
-              fontFamily:"'Playfair Display',serif", fontSize:"clamp(48px,10vw,88px)",
-              fontWeight:900, lineHeight:1, margin:"0 0 16px",
-              background:"linear-gradient(135deg,#fff 0%,#4ade80 50%,#86efac 100%)",
-              WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent",
-              backgroundSize:"200% auto", animation:"shimmer 4s linear infinite",
-            }}>
-              Tristate<br/>Tennis
-            </h1>
-
-            <p style={{
-              fontFamily:"'DM Sans',sans-serif", fontSize:16, color:"rgba(255,255,255,.5)",
-              lineHeight:1.6, margin:"0 0 48px", fontWeight:300, letterSpacing:.5,
-            }}>
-              The official league hub for scheduling,<br/>live scoring &amp; standings
-            </p>
-
-            {/* Stats row */}
-            <div style={{
-              display:"flex", justifyContent:"center", gap:40, marginBottom:48,
-              animation:"fadeUp .8s .3s ease both", opacity:0, animationFillMode:"both",
-            }}>
-              {[["8","Teams"],["10","Players"],["2","Leagues"]].map(([n,l])=>(
-                <div key={l} style={{textAlign:"center"}}>
-                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:36,fontWeight:900,color:"#4ade80",lineHeight:1}}>{n}</div>
-                  <div style={{fontSize:11,color:"rgba(255,255,255,.4)",letterSpacing:2,textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",marginTop:4}}>{l}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Enter button */}
-            <button className="enter-btn" onClick={()=>setPhase("login")} style={{
-              padding:"16px 48px", fontSize:15, fontWeight:500,
-              fontFamily:"'DM Sans',sans-serif", letterSpacing:1,
-              background:"linear-gradient(135deg,#4ade80,#16a34a)",
-              border:"none", borderRadius:100, color:"#021a0a",
-              cursor:"pointer", transition:"all .2s",
-              boxShadow:"0 8px 32px rgba(74,222,128,.25)",
-            }}>
-              Enter the League →
-            </button>
-
-            <div style={{marginTop:20,fontSize:11,color:"rgba(255,255,255,.2)",fontFamily:"'DM Sans',sans-serif",letterSpacing:1}}>
-              Members only · Credentials required
-            </div>
+      {/* ── Player silhouettes ── */}
+      {phase==="landing" && (
+        <>
+          {/* Left player */}
+          <div style={{position:"absolute",bottom:"8%",left:"3%",width:"clamp(140px,18vw,240px)",height:"clamp(240px,32vw,420px)",zIndex:1,animation:"slideLeft .9s .3s ease both",opacity:0,animationFillMode:"both"}}>
+            <PlayerLeft/>
           </div>
-        )}
+          {/* Right player */}
+          <div style={{position:"absolute",bottom:"8%",right:"3%",width:"clamp(140px,18vw,240px)",height:"clamp(240px,32vw,420px)",zIndex:1,animation:"slideRight .9s .5s ease both",opacity:0,animationFillMode:"both"}}>
+            <PlayerRight/>
+          </div>
+          {/* Floating tennis balls */}
+          {[
+            {bottom:"62%",left:"8%", size:28, delay:0,   dur:7 },
+            {bottom:"30%",left:"22%",size:16, delay:1.5, dur:9 },
+            {bottom:"55%",right:"9%",size:24, delay:.8,  dur:8 },
+            {bottom:"25%",right:"20%",size:14,delay:2.2, dur:11},
+          ].map((b,i)=>(
+            <div key={i} style={{position:"absolute",bottom:b.bottom,left:b.left,right:b.right,zIndex:2,animation:`floatBall ${b.dur}s ${b.delay}s ease-in-out infinite`}}>
+              <TennisBall size={b.size}/>
+            </div>
+          ))}
+        </>
+      )}
 
-        {phase === "login" && (
-          <div style={{animation:"fadeUp .5s ease both"}}>
-            <button className="back-btn" onClick={()=>{setPhase("landing");setError("");}} style={{
-              background:"none",border:"none",color:"rgba(255,255,255,.3)",
-              fontSize:13,cursor:"pointer",marginBottom:32,fontFamily:"'DM Sans',sans-serif",
-              display:"flex",alignItems:"center",gap:6,margin:"0 auto 32px",transition:"color .2s",
-            }}>
-              ← Back
+      {/* ── Landing content ── */}
+      {phase==="landing" && (
+        <div style={{position:"relative",zIndex:3,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flex:1,padding:"40px 24px",textAlign:"center"}}>
+
+          {/* Season badge */}
+          <div style={{animation:"fadeUp .6s ease both",display:"inline-flex",alignItems:"center",gap:8,background:"rgba(74,222,128,.08)",border:"1px solid rgba(74,222,128,.2)",borderRadius:100,padding:"6px 18px",marginBottom:28,animation:"pulse3 3s ease infinite"}}>
+            <TennisBall size={14} glow={false}/>
+            <span style={{fontSize:11,color:"#4ade80",letterSpacing:3,textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>Season 2026 · Members Only</span>
+          </div>
+
+          {/* Main title */}
+          <h1 style={{
+            fontFamily:"'Playfair Display',serif",
+            fontSize:"clamp(52px,10vw,96px)",
+            fontWeight:900, lineHeight:.95, margin:"0 0 8px",
+            letterSpacing:-2,
+            animation:"fadeUp .7s .1s ease both", opacity:0, animationFillMode:"both",
+          }}>
+            <span style={{
+              background:"linear-gradient(135deg,#ffffff 0%,#bbf7d0 40%,#4ade80 70%,#86efac 100%)",
+              WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent",
+              backgroundSize:"200% auto", animation:"shimmer 5s linear infinite",
+              display:"block",
+            }}>TRISTATE</span>
+            <span style={{
+              fontStyle:"italic",
+              background:"linear-gradient(135deg,#fef08a 0%,#facc15 50%,#eab308 100%)",
+              WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent",
+              display:"block", fontSize:"85%",
+            }}>Tennis</span>
+          </h1>
+
+          <p style={{
+            fontFamily:"'DM Sans',sans-serif", fontSize:"clamp(13px,2vw,16px)",
+            color:"rgba(255,255,255,.38)", lineHeight:1.7,
+            margin:"16px 0 40px", fontWeight:300, letterSpacing:.8,
+            maxWidth:380,
+            animation:"fadeUp .7s .2s ease both", opacity:0, animationFillMode:"both",
+          }}>
+            Your private league hub · Live scoring<br/>standings · banter · and more
+          </p>
+
+          {/* Stats */}
+          <div style={{
+            display:"flex", justifyContent:"center", gap:"clamp(24px,5vw,56px)",
+            marginBottom:44,
+            animation:"fadeUp .7s .3s ease both", opacity:0, animationFillMode:"both",
+          }}>
+            {[["8","Doubles
+Teams"],["10","Singles
+Players"],["2","Leagues"]].map(([n,l])=>(
+              <div key={l} style={{textAlign:"center"}}>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(30px,5vw,44px)",fontWeight:900,color:"#4ade80",lineHeight:1}}>{n}</div>
+                <div style={{fontSize:10,color:"rgba(255,255,255,.3)",letterSpacing:2,textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",marginTop:6,lineHeight:1.4,whiteSpace:"pre-line"}}>{l}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* CTA */}
+          <button className="enter-btn" onClick={()=>setPhase("login")} style={{
+            padding:"16px 52px", fontSize:15, fontWeight:500,
+            fontFamily:"'DM Sans',sans-serif", letterSpacing:1.5, textTransform:"uppercase",
+            background:"linear-gradient(135deg,#4ade80 0%,#16a34a 100%)",
+            border:"none", borderRadius:100, color:"#021a0a",
+            cursor:"pointer", boxShadow:"0 8px 32px rgba(74,222,128,.3)",
+            animation:"fadeUp .7s .4s ease both", opacity:0, animationFillMode:"both",
+          }}>
+            Enter the League
+          </button>
+
+          {/* Bottom decorative line */}
+          <div style={{marginTop:52,display:"flex",alignItems:"center",gap:16,opacity:.2}}>
+            <div style={{height:1,width:60,background:"linear-gradient(90deg,transparent,#4ade80)"}}/>
+            <TennisBall size={10} glow={false}/>
+            <div style={{height:1,width:60,background:"linear-gradient(90deg,#4ade80,transparent)"}}/>
+          </div>
+        </div>
+      )}
+
+      {/* ── Login form ── */}
+      {phase==="login" && (
+        <div style={{position:"relative",zIndex:3,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flex:1,padding:"40px 24px"}}>
+          <div style={{width:"100%",maxWidth:400,animation:"fadeUp .5s ease both"}}>
+
+            {/* Back */}
+            <button onClick={()=>{setPhase("landing");setError("");}} style={{background:"none",border:"none",color:"rgba(255,255,255,.3)",fontSize:13,cursor:"pointer",marginBottom:28,fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",gap:6,padding:0,transition:"color .2s"}}
+              onMouseOver={e=>e.currentTarget.style.color="rgba(255,255,255,.7)"}
+              onMouseOut={e=>e.currentTarget.style.color="rgba(255,255,255,.3)"}>
+              ← Back to home
             </button>
 
-            <div style={{
-              background:"rgba(255,255,255,.03)", backdropFilter:"blur(20px)",
-              border:"1px solid rgba(255,255,255,.08)", borderRadius:20,
-              padding:"40px 36px", textAlign:"left",
-            }}>
-              <div style={{textAlign:"center",marginBottom:32}}>
-                <div style={{fontSize:32,marginBottom:8}}>🎾</div>
-                <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:700,color:"#fff",margin:"0 0 6px"}}>Welcome back</h2>
-                <p style={{fontFamily:"'DM Sans',sans-serif",fontSize:14,color:"rgba(255,255,255,.4)",margin:0}}>Sign in to access the league</p>
+            {/* Card */}
+            <div style={{background:"rgba(255,255,255,.03)",backdropFilter:"blur(24px)",border:"1px solid rgba(255,255,255,.07)",borderRadius:20,padding:"36px 32px",boxShadow:"0 32px 80px rgba(0,0,0,.5)"}}>
+
+              {/* Header */}
+              <div style={{textAlign:"center",marginBottom:28}}>
+                <div style={{display:"flex",justifyContent:"center",marginBottom:12}}>
+                  <TennisBall size={44}/>
+                </div>
+                <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"#fff",margin:"0 0 6px"}}>Members Login</h2>
+                <p style={{fontFamily:"'DM Sans',sans-serif",fontSize:13,color:"rgba(255,255,255,.35)",margin:0}}>Tristate Tennis League 2026</p>
               </div>
 
               <form onSubmit={handleLogin}>
-                <div style={{marginBottom:16}}>
-                  <label style={{display:"block",fontSize:11,color:"rgba(255,255,255,.4)",letterSpacing:1.5,textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",marginBottom:8}}>Username</label>
-                  <input
-                    className="login-input"
-                    type="text" value={username} onChange={e=>{setUsername(e.target.value);setError("");}}
-                    placeholder="your first name"
+                {/* Username */}
+                <div style={{marginBottom:14}}>
+                  <label style={{display:"block",fontSize:10,color:"rgba(255,255,255,.35)",letterSpacing:2,textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",marginBottom:7}}>Username</label>
+                  <input className="login-input" type="text" value={username} onChange={e=>{setUsername(e.target.value);setError("");}}
+                    placeholder="your first name (lowercase)"
                     autoCapitalize="none" autoCorrect="off" spellCheck={false}
-                    style={{
-                      width:"100%", padding:"13px 16px", fontSize:14,
-                      background:"rgba(255,255,255,.05)", border:"1px solid rgba(255,255,255,.1)",
-                      borderRadius:10, color:"#fff", boxSizing:"border-box",
-                      fontFamily:"'DM Sans',sans-serif", transition:"border-color .2s",
-                    }}
-                  />
-                </div>
-                <div style={{marginBottom:24,position:"relative"}}>
-                  <label style={{display:"block",fontSize:11,color:"rgba(255,255,255,.4)",letterSpacing:1.5,textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",marginBottom:8}}>Password</label>
-                  <input
-                    className="login-input"
-                    type={showPass?"text":"password"} value={password} onChange={e=>{setPassword(e.target.value);setError("");}}
-                    placeholder="••••••••"
-                    style={{
-                      width:"100%", padding:"13px 44px 13px 16px", fontSize:14,
-                      background:"rgba(255,255,255,.05)", border:"1px solid rgba(255,255,255,.1)",
-                      borderRadius:10, color:"#fff", boxSizing:"border-box",
-                      fontFamily:"'DM Sans',sans-serif", transition:"border-color .2s",
-                    }}
-                  />
-                  <button type="button" onClick={()=>setShowPass(v=>!v)} style={{
-                    position:"absolute", right:12, bottom:13, background:"none", border:"none",
-                    color:"rgba(255,255,255,.3)", cursor:"pointer", fontSize:16, padding:0,
-                  }}>{showPass?"🙈":"👁"}</button>
+                    style={{width:"100%",padding:"12px 14px",fontSize:14,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.09)",borderRadius:10,color:"#fff",boxSizing:"border-box",fontFamily:"'DM Sans',sans-serif"}}/>
                 </div>
 
-                {error && (
-                  <div style={{
-                    background:"rgba(239,68,68,.1)", border:"1px solid rgba(239,68,68,.3)",
-                    borderRadius:8, padding:"10px 14px", marginBottom:20,
-                    fontSize:13, color:"#f87171", fontFamily:"'DM Sans',sans-serif",
-                  }}>
+                {/* Password */}
+                <div style={{marginBottom:22,position:"relative"}}>
+                  <label style={{display:"block",fontSize:10,color:"rgba(255,255,255,.35)",letterSpacing:2,textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",marginBottom:7}}>Password</label>
+                  <input className="login-input" type={showPass?"text":"password"} value={password} onChange={e=>{setPassword(e.target.value);setError("");}}
+                    placeholder="••••••••••"
+                    style={{width:"100%",padding:"12px 42px 12px 14px",fontSize:14,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.09)",borderRadius:10,color:"#fff",boxSizing:"border-box",fontFamily:"'DM Sans',sans-serif"}}/>
+                  <button type="button" onClick={()=>setShowPass(v=>!v)} style={{position:"absolute",right:12,bottom:12,background:"none",border:"none",color:"rgba(255,255,255,.25)",cursor:"pointer",fontSize:15,padding:0}}>
+                    {showPass?"🙈":"👁"}
+                  </button>
+                </div>
+
+                {/* Error */}
+                {error&&(
+                  <div style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.25)",borderRadius:8,padding:"10px 14px",marginBottom:18,fontSize:13,color:"#fca5a5",fontFamily:"'DM Sans',sans-serif"}}>
                     ⚠️ {error}
                   </div>
                 )}
 
+                {/* Submit */}
                 <button type="submit" className="enter-btn" disabled={loading||!username||!password} style={{
-                  width:"100%", padding:"14px", fontSize:15, fontWeight:500,
-                  fontFamily:"'DM Sans',sans-serif", letterSpacing:.5,
-                  background: loading||!username||!password
-                    ? "rgba(74,222,128,.2)"
-                    : "linear-gradient(135deg,#4ade80,#16a34a)",
-                  border:"none", borderRadius:10,
-                  color: loading||!username||!password ? "rgba(255,255,255,.3)" : "#021a0a",
-                  cursor: loading||!username||!password ? "not-allowed" : "pointer",
-                  transition:"all .2s", display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+                  width:"100%",padding:"13px",fontSize:14,fontWeight:500,
+                  fontFamily:"'DM Sans',sans-serif",letterSpacing:1,textTransform:"uppercase",
+                  background:loading||!username||!password?"rgba(74,222,128,.15)":"linear-gradient(135deg,#4ade80,#16a34a)",
+                  border:"none",borderRadius:10,
+                  color:loading||!username||!password?"rgba(255,255,255,.2)":"#021a0a",
+                  cursor:loading||!username||!password?"not-allowed":"pointer",
+                  display:"flex",alignItems:"center",justifyContent:"center",gap:8,
                 }}>
                   {loading
-                    ? <><div style={{width:16,height:16,border:"2px solid rgba(2,26,10,.3)",borderTopColor:"#021a0a",borderRadius:"50%",animation:"spin .6s linear infinite"}}/> Signing in…</>
+                    ? <><div style={{width:15,height:15,border:"2px solid rgba(2,26,10,.2)",borderTopColor:"#021a0a",borderRadius:"50%",animation:"spin .6s linear infinite"}}/> Signing in…</>
                     : "Sign In →"
                   }
                 </button>
               </form>
             </div>
 
-            <div style={{marginTop:20,fontSize:11,color:"rgba(255,255,255,.2)",fontFamily:"'DM Sans',sans-serif",textAlign:"center"}}>
-              Contact your league admin if you need access
-            </div>
+            <p style={{textAlign:"center",marginTop:20,fontSize:11,color:"rgba(255,255,255,.18)",fontFamily:"'DM Sans',sans-serif",letterSpacing:.5}}>
+              Contact your league admin for access
+            </p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
