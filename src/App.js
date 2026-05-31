@@ -1302,28 +1302,48 @@ function LoginPage({ onLogin }) {
         <div style={{position:"absolute",inset:0,background:"repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.03) 3px,rgba(0,0,0,.03) 4px)",pointerEvents:"none"}}/>
       </div>
 
-      {/* ── Player silhouettes ── */}
+      {/* ── Photo collage ── */}
       {phase==="landing" && (
         <>
-          {/* Left player */}
-          <div style={{position:"absolute",bottom:"8%",left:"3%",width:"clamp(140px,18vw,240px)",height:"clamp(240px,32vw,420px)",zIndex:1,animation:"slideLeft .9s .3s ease both",opacity:0,animationFillMode:"both"}}>
-            <PlayerLeft/>
+          {/* Left photo panel */}
+          <div style={{position:"absolute",top:0,left:0,width:"22%",height:"100%",zIndex:1,animation:"slideLeft .9s .2s ease both",opacity:0,animationFillMode:"both",overflow:"hidden"}}>
+            <img src="https://images.unsplash.com/photo-1554068865-24cecd4e34b8?fm=jpg&q=80&w=800&auto=format&fit=crop" alt="Tennis" style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center top",filter:"brightness(.55) saturate(0.8)"}}/>
+            <div style={{position:"absolute",inset:0,background:"linear-gradient(90deg,rgba(5,10,18,.8),rgba(5,10,18,.2) 50%,transparent)"}}/>
           </div>
-          {/* Right player */}
-          <div style={{position:"absolute",bottom:"8%",right:"3%",width:"clamp(140px,18vw,240px)",height:"clamp(240px,32vw,420px)",zIndex:1,animation:"slideRight .9s .5s ease both",opacity:0,animationFillMode:"both"}}>
-            <PlayerRight/>
+
+          {/* Right photo panel */}
+          <div style={{position:"absolute",top:0,right:0,width:"22%",height:"100%",zIndex:1,animation:"slideRight .9s .2s ease both",opacity:0,animationFillMode:"both",overflow:"hidden"}}>
+            <img src="https://images.unsplash.com/photo-1614743758466-e569f4791116?fm=jpg&q=80&w=800&auto=format&fit=crop" alt="Tennis" style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center top",filter:"brightness(.55) saturate(0.8)"}}/>
+            <div style={{position:"absolute",inset:0,background:"linear-gradient(-90deg,rgba(5,10,18,.8),rgba(5,10,18,.2) 50%,transparent)"}}/>
           </div>
-          {/* Floating tennis balls */}
+
+          {/* Bottom left photo */}
+          <div style={{position:"absolute",bottom:0,left:"22%",width:"28%",height:"38%",zIndex:1,animation:"fadeIn .9s .5s ease both",opacity:0,animationFillMode:"both",overflow:"hidden"}}>
+            <img src="https://images.unsplash.com/flagged/photo-1576972405668-2d020a01cbfa?fm=jpg&q=80&w=800&auto=format&fit=crop" alt="Doubles tennis" style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center 30%",filter:"brightness(.5) saturate(0.7)"}}/>
+            <div style={{position:"absolute",inset:0,background:"linear-gradient(0deg,rgba(5,10,18,.95),rgba(5,10,18,.3) 60%,transparent)"}}/>
+          </div>
+
+          {/* Bottom right photo */}
+          <div style={{position:"absolute",bottom:0,right:"22%",width:"28%",height:"38%",zIndex:1,animation:"fadeIn .9s .7s ease both",opacity:0,animationFillMode:"both",overflow:"hidden"}}>
+            <img src="https://images.unsplash.com/photo-1637071692126-d0ee7df18271?fm=jpg&q=80&w=600&auto=format&fit=crop" alt="Tennis player" style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center 20%",filter:"brightness(.5) saturate(0.7)"}}/>
+            <div style={{position:"absolute",inset:0,background:"linear-gradient(0deg,rgba(5,10,18,.95),rgba(5,10,18,.3) 60%,transparent)"}}/>
+          </div>
+
+          {/* Tennis ball floating */}
           {[
-            {bottom:"62%",left:"8%", size:28, delay:0,   dur:7 },
-            {bottom:"30%",left:"22%",size:16, delay:1.5, dur:9 },
-            {bottom:"55%",right:"9%",size:24, delay:.8,  dur:8 },
-            {bottom:"25%",right:"20%",size:14,delay:2.2, dur:11},
+            {bottom:"62%",left:"19%", size:26, delay:0,   dur:7 },
+            {bottom:"30%",left:"24%", size:14, delay:1.5, dur:9 },
+            {bottom:"58%",right:"19%",size:22, delay:.8,  dur:8 },
+            {bottom:"28%",right:"24%",size:12, delay:2.2, dur:11},
           ].map((b,i)=>(
             <div key={i} style={{position:"absolute",bottom:b.bottom,left:b.left,right:b.right,zIndex:2,animation:`floatBall ${b.dur}s ${b.delay}s ease-in-out infinite`}}>
               <TennisBall size={b.size}/>
             </div>
           ))}
+
+          {/* Divider lines between panels */}
+          <div style={{position:"absolute",top:0,left:"22%",width:1,height:"100%",background:"linear-gradient(180deg,transparent,rgba(74,222,128,.2) 30%,rgba(74,222,128,.2) 70%,transparent)",zIndex:2}}/>
+          <div style={{position:"absolute",top:0,right:"22%",width:1,height:"100%",background:"linear-gradient(180deg,transparent,rgba(74,222,128,.2) 30%,rgba(74,222,128,.2) 70%,transparent)",zIndex:2}}/>
         </>
       )}
 
@@ -1375,7 +1395,9 @@ function LoginPage({ onLogin }) {
             marginBottom:44,
             animation:"fadeUp .7s .3s ease both", opacity:0, animationFillMode:"both",
           }}>
-            {[["8","Doubles Teams"],["10","Singles Players"],["2","Leagues"]].map(([n,l])=>(
+            {[["8","Doubles
+Teams"],["10","Singles
+Players"],["2","Leagues"]].map(([n,l])=>(
               <div key={l} style={{textAlign:"center"}}>
                 <div style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(30px,5vw,44px)",fontWeight:900,color:"#4ade80",lineHeight:1}}>{n}</div>
                 <div style={{fontSize:10,color:"rgba(255,255,255,.3)",letterSpacing:2,textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",marginTop:6,lineHeight:1.4}}>{l}</div>
