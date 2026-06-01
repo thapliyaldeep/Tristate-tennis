@@ -1099,14 +1099,14 @@ function PollsTab({data, upd, allPlayers, firebaseUser}) {
   const pending    = allMatches.filter(m=>!m.done);
   const complete   = allMatches.filter(m=>m.done);
 
-  const myPoints = user && betPoints[user] !== undefined ? betPoints[user] : START_POINTS;
+  const myPoints = user && betPoints[user] !== undefined ? (typeof betPoints[user]==='object' ? betPoints[user].pts : betPoints[user]) : START_POINTS;
 
   // ── Poll helpers ──
   function getPollPct(matchId, side) {
     const p = polls[matchId] || {};
     const total = Object.keys(p).length;
     if (!total) return 0;
-    const count = Object.values(p).filter(v=>v===side).length;
+    const count = Object.values(p).filter(v=>(typeof v==='object'?v.side:v)===side).length;
     return Math.round(count/total*100);
   }
 
@@ -1114,15 +1114,15 @@ function PollsTab({data, upd, allPlayers, firebaseUser}) {
     const p = tournPoll[type] || {};
     const total = Object.keys(p).length;
     if (!total) return 0;
-    const count = Object.values(p).filter(v=>v===name).length;
+    const count = Object.values(p).filter(v=>(typeof v==='object'?v.side:v)===name).length;
     return Math.round(count/total*100);
   }
 
   async function votePoll(matchId, side) {
     if (!user) { alert("Please sign in first!"); return; }
     const key = "poll_" + matchId;
-    if (hasVoted(key)) { alert("You have already voted on this match from this device!"); return; }
-    await upd(d=>({...d, polls:{...d.polls, [matchId]:{...(d.polls[matchId]||{}), [user]:side}}}));
+    if (hasVoted(key)) { alert("You have already voted on this match!"); return; }
+    await upd(d=>({...d, polls:{...d.polls, [matchId]:{...(d.polls[matchId]||{}), [user]:{side, name:userName}}}}));
     markDeviceVote(key);
   }
 
@@ -1154,10 +1154,10 @@ function PollsTab({data, upd, allPlayers, firebaseUser}) {
     if (!user || !amount || amount<1) return;
     if (amount > myPoints) return;
     const key = "bet_" + m.id;
-    if (hasVoted(key)) { alert("You have already placed a bet on this match from this device!"); return; }
+    if (hasVoted(key)) { alert("You have already placed a bet on this match!"); return; }
     await upd(d=>{
-      const newBets = {...d.bets, [m.id]:{...(d.bets[m.id]||{}), [user]:{side, amount}}};
-      const newPts  = {...d.betPoints, [user]:(d.betPoints[user]!==undefined?d.betPoints[user]:START_POINTS) - amount};
+      const newBets = {...d.bets, [m.id]:{...(d.bets[m.id]||{}), [user]:{side, amount, name:userName}}};
+      const newPts  = {...d.betPoints, [user]:{pts:(d.betPoints[user]?.pts!==undefined?d.betPoints[user].pts:START_POINTS)-amount, name:userName}};
       return {...d, bets:newBets, betPoints:newPts};
     });
     markDeviceVote(key);
@@ -1228,7 +1228,7 @@ function PollsTab({data, upd, allPlayers, firebaseUser}) {
           <div style={{fontWeight:700,color:"#fff",marginBottom:16}}>Who will win?</div>
           {pending.length===0&&<div style={{textAlign:"center",color:"#64748b",padding:"40px 0"}}>No upcoming matches to vote on.</div>}
           {pending.map(m=>{
-            const myVote = polls[m.id]?.[user];
+            const myVoteRaw = polls[m.id]?.[user]; const myVote = myVoteRaw ? (typeof myVoteRaw==='object'?myVoteRaw.side:myVoteRaw) : null;
             const pA = getPollPct(m.id, m.a);
             const pB = getPollPct(m.id, m.b);
             const total = Object.keys(polls[m.id]||{}).length;
@@ -1276,7 +1276,7 @@ function PollsTab({data, upd, allPlayers, firebaseUser}) {
           <div style={{fontWeight:700,color:"#fff",marginBottom:20}}>Who will win the tournament?</div>
           {["doubles","singles"].map(type=>{
             const players = type==="doubles"?data.doubles:data.singles;
-            const myVote  = tournPoll[type]?.[user];
+            const myVoteRaw2 = tournPoll[type]?.[user]; const myVote = myVoteRaw2 ? (typeof myVoteRaw2==='object'?myVoteRaw2.side:myVoteRaw2) : null;
             const total   = Object.keys(tournPoll[type]||{}).length;
             return (
               <div key={type} style={{marginBottom:28}}>
