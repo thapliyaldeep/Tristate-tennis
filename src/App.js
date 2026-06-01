@@ -1065,24 +1065,24 @@ function BanterTab({data, upd, firebaseUser}) {
 // ─── Polls & Betting Tab ─────────────────────────────────────────────────────
 const START_POINTS = 20;
 
-function PollsTab({data, upd, allPlayers}) {
-  const [user, setUser]       = useState("");
-  const [betAmt, setBetAmt]   = useState({});   // matchId -> amount string
+function PollsTab({data, upd, allPlayers, firebaseUser}) {
+  const user     = firebaseUser ? firebaseUser.uid : "";
+  const userName = firebaseUser ? (firebaseUser.displayName || (firebaseUser.email||"").split("@")[0]) : "You";
+  const [betAmt, setBetAmt]   = useState({});
+  const [section, setSection] = useState("polls");
 
-  // Device-level vote/bet tracking via localStorage
-  const DEVICE_KEY = "tristate_device_votes";
-  function getDeviceVotes() {
-    try { return JSON.parse(localStorage.getItem(DEVICE_KEY)||"{}"); } catch { return {}; }
+  function hasDeviceVoted(key) {
+    if (!user) return false;
+    try { return !!(JSON.parse(localStorage.getItem("tristate_device_votes")||"{}")[user+"_"+key]); } catch { return false; }
   }
   function markDeviceVote(key) {
-    const v = getDeviceVotes();
-    v[key] = true;
-    try { localStorage.setItem(DEVICE_KEY, JSON.stringify(v)); } catch {}
+    if (!user) return;
+    try {
+      const v = JSON.parse(localStorage.getItem("tristate_device_votes")||"{}");
+      v[user+"_"+key] = true;
+      localStorage.setItem("tristate_device_votes", JSON.stringify(v));
+    } catch {}
   }
-  function hasDeviceVoted(key) {
-    return !!getDeviceVotes()[key];
-  }
-  const [section, setSection] = useState("polls"); // polls | bets | tourn | leaderboard
 
   const polls     = data.polls     || {};
   const tournPoll = data.tournPoll || {doubles:{}, singles:{}};
