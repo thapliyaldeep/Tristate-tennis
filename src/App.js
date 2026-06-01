@@ -1093,7 +1093,7 @@ function PollsTab({data, upd, allPlayers}) {
   const pending    = allMatches.filter(m=>!m.done);
   const complete   = allMatches.filter(m=>m.done);
 
-  const myPoints = betPoints[user] !== undefined ? betPoints[user] : START_POINTS;
+  const myPoints = user && betPoints[user] !== undefined ? betPoints[user] : START_POINTS;
 
   // ── Poll helpers ──
   function getPollPct(matchId, side) {
@@ -1113,7 +1113,7 @@ function PollsTab({data, upd, allPlayers}) {
   }
 
   async function votePoll(matchId, side) {
-    if (!user) { alert("Please select your name first!"); return; }
+    if (!user) { alert("Please sign in first!"); return; }
     const key = "poll_" + matchId;
     if (hasDeviceVoted(key)) { alert("You have already voted on this match from this device!"); return; }
     await upd(d=>({...d, polls:{...d.polls, [matchId]:{...(d.polls[matchId]||{}), [user]:side}}}));
@@ -1121,7 +1121,7 @@ function PollsTab({data, upd, allPlayers}) {
   }
 
   async function voteTournament(type, name) {
-    if (!user) { alert("Please select your name first!"); return; }
+    if (!user) { alert("Please sign in first!"); return; }
     const key = "tourn_" + type;
     if (hasDeviceVoted(key)) { alert("You have already voted on this tournament from this device!"); return; }
     await upd(d=>({...d, tournPoll:{...d.tournPoll, [type]:{...(d.tournPoll[type]||{}), [user]:name}}}));
