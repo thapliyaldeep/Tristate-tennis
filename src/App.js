@@ -1394,7 +1394,7 @@ export default function App() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [data,      setData]      = useState(null);
   const [status,    setStatus]    = useState("loading");
-  const [tab,       setTab]       = useState("schedule");
+  const [tab,       setTab]       = useState("scores");
   const [lg,        setLg]        = useState("doubles");
   const [modal,     setModal]     = useState(null);
   const [mf,        setMf]        = useState({});
@@ -1679,7 +1679,7 @@ export default function App() {
             </div>
           </div>
           <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
-            {[["schedule","📅 Schedule"],["scores","🎯 Scores"],["leaderboard","🏆 Standings"],["polls","🗳️ Polls"],["banter","💬 Banter"],["manage","⚙️ Manage"]].map(([id,label])=>(
+            {[["scores","🎯 Scores"],["schedule","📅 Schedule"],["leaderboard","🏆 Standings"],["polls","🗳️ Polls"],["banter","💬 Banter"],["manage","⚙️ Manage"]].map(([id,label])=>(
               <button key={id} onClick={()=>setTab(id)} style={{padding:"8px 16px",border:"none",cursor:"pointer",borderRadius:"6px 6px 0 0",background:tab===id?"#1e293b":"transparent",color:tab===id?"#fff":"#64748b",fontWeight:tab===id?700:400,fontSize:13}}>{label}</button>
             ))}
           </div>
