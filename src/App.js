@@ -800,7 +800,7 @@ function MatchCard({m, onScore, onDel, onGoLive, onViewStats}) {
         </div>
       </div>
       <div style={{textAlign:"right"}}>
-        <div style={{fontSize:12,color:"#64748b"}}>{m.date}{m.time?` · ${m.time}`:""}</div>
+        <div style={{fontSize:12,color:"#64748b"}}>{m.date}{m.time?` · ${m.time}`:""}{m.venue?` · 📍${m.venue}`:""}</div>
         {m.done&&winner&&<div style={{fontSize:12,color:"#10b981",marginTop:3}}>🏆 {winner}</div>}
         {locked&&<div style={{fontSize:11,color:"#f59e0b",marginTop:3}}>🔒 Locked after 24h</div>}
         <div style={{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}}>
@@ -1235,7 +1235,7 @@ function PollsTab({data, upd, allPlayers}) {
             const total = Object.keys(polls[m.id]||{}).length;
             return (
               <div key={m.id} style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:"16px",marginBottom:12}}>
-                <div style={{fontSize:12,color:"#64748b",marginBottom:10}}>{m.date}{m.time?` · ${m.time}`:""}</div>
+                <div style={{fontSize:12,color:"#64748b",marginBottom:10}}>{m.date}{m.time?` · ${m.time}`:""}{m.venue?` · 📍${m.venue}`:""}</div>
                 {(()=>{
                   const voted = hasDeviceVoted("poll_"+m.id);
                   return(
@@ -1549,7 +1549,7 @@ export default function App() {
   // ── Match handlers ──
   async function addMatch() {
     await upd(d=>{
-      const m={id:isD?`d${d.did}`:`s${d.sid}`,a:mf.a,b:mf.b,date:mf.date||defaultDate,time:mf.time||"",sa:"",sb:"",done:false};
+      const m={id:isD?`d${d.did}`:`s${d.sid}`,a:mf.a,b:mf.b,date:mf.date||defaultDate,time:mf.time||"",venue:mf.venue||"",sa:"",sb:"",done:false};
       return isD?{...d,dMatches:[...d.dMatches,m],did:d.did+1}:{...d,sMatches:[...d.sMatches,m],sid:d.sid+1};
     }); setModal(null);
   }
@@ -1720,7 +1720,7 @@ export default function App() {
                           {m.live&&<div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}><div style={{width:6,height:6,borderRadius:"50%",background:"#ef4444",animation:"pulse 1s infinite"}}/><span style={{color:"#ef4444",fontSize:10,fontWeight:700}}>LIVE</span></div>}
                           <div style={{fontWeight:700,color:m.live?"#fca5a5":"#93c5fd",fontSize:13}}>{m.a}</div>
                           <div style={{fontSize:11,color:"#64748b"}}>vs {m.b}</div>
-                          <div style={{color:"#64748b",fontSize:11,marginTop:5}}>{m.date}{m.time?` · ${m.time}`:""}</div>
+                          <div style={{color:"#64748b",fontSize:11,marginTop:5}}>{m.date}{m.time?` · ${m.time}`:""}{m.venue?` · 📍${m.venue}`:""}</div>
                         </div>
                       ))}
                     </div>
@@ -1739,7 +1739,7 @@ export default function App() {
                             <div style={{fontSize:11,color:"#64748b"}}>vs</div>
                             <div style={{fontWeight:700,color:winner===m.b?"#34d399":"#cbd5e1",fontSize:13}}>{m.b} {winner===m.b&&"🏆"}</div>
                             <div style={{color:"#10b981",fontSize:11,marginTop:5,fontWeight:600}}>{m.sa} / {m.sb}</div>
-                            <div style={{color:"#64748b",fontSize:10,marginTop:3}}>{m.date}{m.time?` · ${m.time}`:""}</div>
+                            <div style={{color:"#64748b",fontSize:10,marginTop:3}}>{m.date}{m.time?` · ${m.time}`:""}{m.venue?` · 📍${m.venue}`:""}</div>
                           </div>
                         );
                       })}
@@ -1912,6 +1912,8 @@ export default function App() {
           </select>
           <label style={lbl}>Time</label>
           <input style={inp} placeholder="e.g. 5:30pm" value={mf.time||""} onChange={e=>setMf(f=>({...f,time:e.target.value}))}/>
+          <label style={lbl}>Venue (optional)</label>
+          <input style={inp} placeholder="e.g. JFK Tennis Courts" value={mf.venue||""} onChange={e=>setMf(f=>({...f,venue:e.target.value}))}/>
           <div style={{display:"flex",gap:8,marginTop:18}}>
             <button style={pbtn} disabled={!mf.a||!mf.b} onClick={addMatch}>Schedule</button>
             <button style={sbtn} onClick={()=>setModal(null)}>Cancel</button>
