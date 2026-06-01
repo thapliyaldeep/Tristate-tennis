@@ -894,8 +894,8 @@ const ALL_PLAYERS = [
   "Pratyush","Viraj","Tushar"
 ];
 
-function BanterTab({data, upd}) {
-  const [author, setAuthor] = useState("");
+function BanterTab({data, upd, firebaseUser}) {
+  const author = firebaseUser?.displayName || firebaseUser?.email?.split("@")[0] || "";
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji]       = useState(null); // message id
   const [showMsgEmoji, setShowMsgEmoji] = useState(false); // emoji picker for input
@@ -922,6 +922,7 @@ function BanterTab({data, upd}) {
     const msg = {
       id: Date.now().toString(),
       author: author.trim(),
+      photo: firebaseUser?.photoURL||null,
       text: text.trim(),
       ts: Date.now(),
       reactions: {},
@@ -957,17 +958,16 @@ function BanterTab({data, upd}) {
 
   return (
     <div style={{maxWidth:640,margin:"0 auto"}}>
-      {/* Name selector */}
-      <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-        <select value={author} onChange={e=>setAuthor(e.target.value)}
-          style={{flex:1,minWidth:160,padding:"8px 10px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:author?"#e2e8f0":"#64748b",fontSize:13,outline:"none"}}>
-          <option value="">Select your name to post…</option>
-          {ALL_PLAYERS.map(p=><option key={p} value={p}>{p}</option>)}
-        </select>
-        {author&&<div style={{display:"flex",alignItems:"center",gap:8}}>
-          <div style={{width:30,height:30,borderRadius:"50%",background:"#1d4ed8",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:"#fff",fontSize:13}}>{author[0]}</div>
-          <span style={{fontWeight:700,color:"#93c5fd",fontSize:13}}>{author}</span>
-        </div>}
+      {/* Logged in user */}
+      <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:10}}>
+        {firebaseUser?.photoURL
+          ?<img src={firebaseUser.photoURL} alt="" style={{width:32,height:32,borderRadius:"50%"}}/>
+          :<div style={{width:32,height:32,borderRadius:"50%",background:"linear-gradient(135deg,#4ade80,#16a34a)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:"#021a0a",fontSize:13}}>{author?author[0].toUpperCase():"?"}</div>
+        }
+        <div>
+          <div style={{fontWeight:700,color:"#fff",fontSize:13}}>{author||"Unknown"}</div>
+          <div style={{fontSize:11,color:"#64748b"}}>{firebaseUser?.email}</div>
+        </div>
       </div>
 
       {/* Message input */}
@@ -1016,9 +1016,10 @@ function BanterTab({data, upd}) {
       {[...banter].reverse().map(msg=>(
         <div key={msg.id} style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:"14px 16px",marginBottom:12,position:"relative"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <div style={{width:30,height:30,borderRadius:"50%",background:"#1d4ed8",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:"#fff",fontSize:13,flexShrink:0}}>
-              {msg.author[0]}
-            </div>
+            {msg.photo
+              ?<img src={msg.photo} alt="" style={{width:30,height:30,borderRadius:"50%",flexShrink:0}}/>
+              :<div style={{width:30,height:30,borderRadius:"50%",background:"#1d4ed8",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:"#fff",fontSize:13,flexShrink:0}}>{msg.author[0]}</div>
+            }
             <span style={{fontWeight:700,color:"#93c5fd",fontSize:14}}>{msg.author}</span>
             <span style={{fontSize:11,color:"#475569",marginLeft:"auto"}}>{formatTime(msg.ts)}</span>
           </div>
@@ -1194,25 +1195,17 @@ function PollsTab({data, upd, allPlayers}) {
 
   return (
     <div style={{maxWidth:640,margin:"0 auto"}}>
-      {/* Name picker — always visible at top */}
-      <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:10,padding:"12px 16px",marginBottom:20}}>
-        <div style={{fontSize:11,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>Who are you?</div>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          <select value={allPlayers.includes(user)?user:""} onChange={e=>setUser(e.target.value)}
-            style={{flex:1,minWidth:140,padding:"8px 10px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:13,outline:"none"}}>
-            <option value="">Pick from player list…</option>
-            {allPlayers.map(p=><option key={p} value={p}>{p}</option>)}
-          </select>
-          <input value={allPlayers.includes(user)?"":user} onChange={e=>setUser(e.target.value)}
-            placeholder="Or type guest name…"
-            style={{flex:1,minWidth:130,padding:"8px 10px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:13,outline:"none"}}/>
+      {/* Logged in user identity */}
+      <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:10,padding:"12px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:10}}>
+        {firebaseUser?.photoURL
+          ?<img src={firebaseUser.photoURL} alt="" style={{width:32,height:32,borderRadius:"50%"}}/>
+          :<div style={{width:32,height:32,borderRadius:"50%",background:"linear-gradient(135deg,#4ade80,#16a34a)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:"#021a0a",fontSize:13}}>{userName[0].toUpperCase()}</div>
+        }
+        <div>
+          <div style={{fontWeight:700,color:"#fff",fontSize:13}}>{userName}</div>
+          <div style={{fontSize:11,color:"#64748b"}}>{firebaseUser?.email}</div>
         </div>
-        {user&&<div style={{display:"flex",alignItems:"center",gap:8,marginTop:10}}>
-          <div style={{width:28,height:28,borderRadius:"50%",background:"#1d4ed8",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,color:"#fff",fontSize:12}}>{user[0].toUpperCase()}</div>
-          <span style={{fontWeight:700,color:"#93c5fd",fontSize:13}}>{user}</span>
-          <span style={{fontSize:12,color:"#f59e0b",marginLeft:4}}>🪙 {myPoints} pts</span>
-          <button onClick={()=>setUser("")} style={{background:"none",border:"none",color:"#64748b",fontSize:11,cursor:"pointer",marginLeft:"auto"}}>Change</button>
-        </div>}
+        <span style={{fontSize:12,color:"#f59e0b",marginLeft:"auto"}}>🪙 {myPoints} pts</span>
       </div>
 
       {/* Section tabs */}
@@ -1842,7 +1835,7 @@ export default function App() {
 
         {/* POLLS */}
         {tab==="polls"&&(
-          <PollsTab data={data} upd={upd} allPlayers={[
+          <PollsTab data={data} upd={upd} firebaseUser={firebaseUser} allPlayers={[
             "Nitin","Ashish","Jai","Deep","Tarun","Sumit","Bobby","Satendra",
             "Akash","Micky","Dhar","Vineet","Sanjay","Ravi","Shailesh","Uzair",
             "Pratyush","Viraj","Tushar"
@@ -1851,7 +1844,7 @@ export default function App() {
 
         {/* BANTER */}
         {tab==="banter"&&(
-          <BanterTab data={data} upd={upd}/>
+          <BanterTab data={data} upd={upd} firebaseUser={firebaseUser}/>
         )}
 
         {/* MANAGE */}
