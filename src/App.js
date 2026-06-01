@@ -1177,8 +1177,7 @@ function PollsTab({data, upd, allPlayers, firebaseUser}) {
 
   // Compute bet leaderboard (settle completed matches)
   function betLeaderboard() {
-    const pts = {...betPoints};
-    // Add winnings for completed matches
+    const winnings = {};
     for (const m of complete) {
       const wa = calcWins(m.sa), wb = calcWins(m.sb); if(!wa||!wb) continue;
       const winner = wa.w>wb.w ? m.a : m.b;
@@ -1186,17 +1185,21 @@ function PollsTab({data, upd, allPlayers, firebaseUser}) {
       const totalPool = Object.values(matchBets).reduce((s,b)=>s+b.amount,0);
       const winners   = Object.entries(matchBets).filter(([,b])=>b.side===winner);
       const totalWin  = winners.reduce((s,[,b])=>s+b.amount,0);
-      for (const [player, b] of winners) {
+      for (const [uid, b] of winners) {
         if (!totalWin) continue;
-        const share = (b.amount/totalWin) * totalPool;
-        pts[player] = (pts[player]!==undefined?pts[player]:START_POINTS) + share;
+        winnings[uid] = (winnings[uid]||0) + (b.amount/totalWin)*totalPool;
       }
     }
-    // Include all known players with default points
-    const everyone = [...new Set([...allPlayers, ...Object.keys(pts)])];
-    return everyone
-      .map(n=>({n, pts: Math.round(pts[n]!==undefined?pts[n]:START_POINTS)}))
-      .sort((a,b)=>b.pts-a.pts);
+    // Build entries from betPoints
+    const entries = Object.entries(betPoints).map(([uid, val]) => {
+      const pts  = typeof val==='object' ? (val.pts??START_POINTS) : (typeof val==='number' ? val : START_POINTS);
+      const name = typeof val==='object' ? (val.name||null) : null;
+      const total = Math.round(pts + (winnings[uid]||0));
+      const displayName = uid===user ? userName : (name || (uid.length>20 ? uid.slice(0,8)+"…" : uid));
+      return { uid, n:displayName, pts:isNaN(total)?START_POINTS:total };
+    });
+    if (user && !betPoints[user]) entries.push({uid:user, n:userName, pts:START_POINTS});
+    return entries.sort((a,b)=>b.pts-a.pts);
   }
 
   const lb = betLeaderboard();
