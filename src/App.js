@@ -603,7 +603,7 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
   const sw = setsWon(live);
   const over = matchOver(live);
   const nameA = m.a, nameB = m.b;
-  const [activeTab, setActiveTab] = useState(null); // null | "points" | "momentum" | "stats" 
+  const [activeTab, setActiveTab] = useState("points"); // points | momentum | stats
   const canUndo = isKeeper && (live.history||[]).length > 0;
 
   const bigNum = {fontSize:56,fontWeight:900,lineHeight:1,color:"#fff"};
@@ -630,14 +630,7 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
           {live.startTs&&<span style={{color:"#64748b",fontSize:11,marginLeft:4}}>· {fmt(Date.now()-live.startTs)}</span>}
         </div>
         <div style={{display:"flex",gap:8}}>
-          <div style={{display:"flex",gap:4}}>
-            {[["points","📋"],["momentum","📈"],["stats","📊"]].map(([id,icon])=>(
-              <button key={id} onClick={()=>setActiveTab(t=>t===id?null:id)}
-                style={{background:activeTab===id?"#3b82f6":"#1e293b",border:"none",borderRadius:6,color:activeTab===id?"#fff":"#64748b",cursor:"pointer",padding:"5px 8px",fontSize:12}}>
-                {icon}
-              </button>
-            ))}
-          </div>
+          <div style={{width:24}}/>
           <button onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:20,cursor:"pointer"}}>×</button>
         </div>
       </div>
@@ -686,6 +679,18 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
         {live.deuce&&!live.adv&&!over&&(
           <div style={{background:"#1e3a5f",color:"#93c5fd",fontWeight:700,fontSize:14,padding:"6px 20px",borderRadius:20,letterSpacing:2}}>DEUCE</div>
         )}
+
+        {/* Tab bar — always visible like ioncourt */}
+        <div style={{display:"flex",gap:0,width:"100%",background:"#111827",borderRadius:10,overflow:"hidden",border:"1px solid #1e293b"}}>
+          {[["points","📋 Points"],["momentum","📈 Momentum"],["stats","📊 Stats"]].map(([id,label])=>(
+            <button key={id} onClick={()=>setActiveTab(id)} style={{
+              flex:1,padding:"10px 4px",border:"none",cursor:"pointer",fontSize:12,fontWeight:activeTab===id?700:400,
+              background:activeTab===id?"#1e3a5f":"transparent",
+              color:activeTab===id?"#93c5fd":"#64748b",
+              borderRight:"1px solid #1e293b",
+            }}>{label}</button>
+          ))}
+        </div>
 
         {/* Keeper controls */}
         {isKeeper&&!over&&(
