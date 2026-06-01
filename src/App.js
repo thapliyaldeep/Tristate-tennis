@@ -769,7 +769,7 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
 }
 
 // ─── Match Card ───────────────────────────────────────────────────────────────
-function MatchCard({m, onScore, onDel, onGoLive}) {
+function MatchCard({m, onScore, onDel, onGoLive, onViewStats}) {
   const wa=m.done?calcWins(m.sa):null, wb=m.done?calcWins(m.sb):null;
   const winner=wa&&wb?(wa.w>wb.w?m.a:m.b):null;
   const locked=m.done&&!isEditable(m);
@@ -803,6 +803,7 @@ function MatchCard({m, onScore, onDel, onGoLive}) {
         <div style={{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}}>
           {!m.done&&<button onClick={onGoLive} style={{padding:"6px 12px",background:isLive?"#2d1515":"#1a2744",border:`1px solid ${isLive?"#ef444466":"#334155"}`,borderRadius:6,color:isLive?"#ef4444":"#93c5fd",fontSize:12,cursor:"pointer"}}>{isLive?"📡 Watch Live":"📡 Go Live"}</button>}
           {!locked&&!isLive&&<button onClick={onScore} style={{padding:"6px 12px",background:"#1e3a5f",border:"none",borderRadius:6,color:"#93c5fd",fontSize:12,cursor:"pointer"}}>{m.done?"✏️ Edit":"📝 Score"}</button>}
+          {m.done&&m.matchStats&&onViewStats&&<button onClick={onViewStats} style={{padding:"6px 12px",background:"#14532d",border:"none",borderRadius:6,color:"#34d399",fontSize:12,cursor:"pointer"}}>📊 Stats</button>}
           <button onClick={onDel} style={{padding:"6px 10px",background:"#2d1515",border:"none",borderRadius:6,color:"#f87171",fontSize:12,cursor:"pointer"}}>🗑</button>
         </div>
       </div>
@@ -1766,6 +1767,45 @@ function LoginPage({ onLogin }) {
   );
 }
 
+
+// ─── Completed Match Stats Viewer ────────────────────────────────────────────
+function CompletedMatchStats({m, onClose}) {
+  const [tab, setTab] = useState("points");
+  const live = m.matchStats;
+  return (
+    <div style={{position:"fixed",inset:0,background:"#07090f",zIndex:1000,display:"flex",flexDirection:"column",fontFamily:"system-ui,sans-serif"}}>
+      {/* Header */}
+      <div style={{background:"#0a1020",borderBottom:"1px solid #1e293b",padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+        <div>
+          <div style={{fontWeight:700,color:"#fff",fontSize:15}}>{m.a} vs {m.b}</div>
+          <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{m.date}{m.time?` · ${m.time}`:""} · {m.sa} / {m.sb}</div>
+        </div>
+        <button onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:20,cursor:"pointer"}}>×</button>
+      </div>
+      {/* Tab bar */}
+      <div style={{display:"flex",gap:0,background:"#111827",borderBottom:"1px solid #1e293b",flexShrink:0}}>
+        {[["points","📋 Points"],["momentum","📈 Momentum"],["stats","📊 Stats"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{
+            flex:1,padding:"12px 4px",border:"none",cursor:"pointer",fontSize:13,
+            fontWeight:tab===id?700:400,
+            background:"transparent",
+            color:tab===id?"#93c5fd":"#64748b",
+            borderBottom:tab===id?"2px solid #3b82f6":"2px solid transparent",
+          }}>{label}</button>
+        ))}
+      </div>
+      {/* Content */}
+      <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
+        <div style={{maxWidth:500,margin:"0 auto"}}>
+          {tab==="points"&&<PointsHistory live={live} nameA={m.a} nameB={m.b}/>}
+          {tab==="momentum"&&<MomentumChart live={live} nameA={m.a} nameB={m.b}/>}
+          {tab==="stats"&&<MatchMetrics live={live} nameA={m.a} nameB={m.b}/>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [authedUser, setAuthedUser] = useState(()=>getAuth()?.username||null);
@@ -1776,6 +1816,7 @@ export default function App() {
   const [modal,     setModal]     = useState(null);
   const [mf,        setMf]        = useState({});
   const [liveMatch, setLiveMatch] = useState(null); // {matchId, type, isKeeper}
+  const [statsMatch, setStatsMatch] = useState(null); // show stats for completed match
   const [showToss,  setShowToss]  = useState(false);
   const [tossData,  setTossData]  = useState(null); // {matchId, type, m}
 
@@ -1907,7 +1948,7 @@ export default function App() {
     const stamp = Date.now();
     await upd(d=>{
       const key=type==="doubles"?"dMatches":"sMatches";
-      return {...d,[key]:d[key].map(x=>x.id===m.id?{...x,sa,sb,done:true,completedAt:stamp,live:null}:x)};
+      return {...d,[key]:d[key].map(x=>x.id===m.id?{...x,sa,sb,done:true,completedAt:stamp,matchStats:m.live,live:null}:x)};
     });
     setLiveMatch(null);
   }
@@ -1967,6 +2008,12 @@ export default function App() {
         }}
       />
     );
+  }
+
+  // Show stats overlay for completed match
+  if (statsMatch) {
+    const sm = [...(data.dMatches||[]),...(data.sMatches||[])].find(x=>x.id===statsMatch);
+    if (sm?.matchStats) return <CompletedMatchStats m={sm} onClose={()=>setStatsMatch(null)}/>;
   }
 
   // Show live score overlay
@@ -2170,6 +2217,7 @@ export default function App() {
                     onScore={()=>{setModal("score");setMf({id:m.id,a:m.a,b:m.b,date:m.date,time:m.time,sa:m.sa,sb:m.sb});}}
                     onDel={()=>delMatch(m.id)}
                     onGoLive={()=>{}}
+                    onViewStats={m.matchStats?()=>setStatsMatch(m.id):null}
                   />
                 ))}
               </div>
