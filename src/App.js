@@ -102,8 +102,8 @@ function addPoint(live, who) {
   const opp = who==="a"?"b":"a";
   const now = Date.now();
 
-  // Log the point
-  l.pointLog = [...(l.pointLog||[]), {who, ts:now, set:l.sets.length, game:l.totalGames||0}];
+  // Log the point (include current server for stats)
+  l.pointLog = [...(l.pointLog||[]), {who, ts:now, set:l.sets.length, game:l.totalGames||0, server:l.serving}];
 
   // Deuce/advantage logic
   if (l.deuce) {
@@ -240,53 +240,301 @@ function fmt(ms) {
   return `${m}:${sec.toString().padStart(2,"0")}`;
 }
 
-function MatchMetrics({live, nameA, nameB}) {
-  const now = Date.now();
-  const elapsed = now - (live.startTs||now);
-  const sets = live.sets||[];
-  const gameTs = live.gameTs||[];
-  const setTs  = live.setTs||[];
-  const pointLog = live.pointLog||[];
+// ─── Reconstruct game-by-game history from pointLog ─────────────────────────
+function buildGameHistory(live, nameA, nameB) {
+  const PTS_LABEL = [0,15,30,40];
+  const pointLog = live.pointLog || [];
+  const games = [];
+  let currentGame = { points:[], setScore:"0-0", gameScore:"0-0", server:live.serving||"a" };
+  let gamesA=0, gamesB=0, setsA=0, setsB=0;
+  let pA=0, pB=0, deuce=false, adv=null;
+  let server = live.serving||"a";
 
-  // Game durations
-  const gameDurations = [];
-  for (let i=1; i<gameTs.length; i++) gameDurations.push(gameTs[i]-gameTs[i-1]);
-  const avgGame = gameDurations.length ? gameDurations.reduce((s,v)=>s+v,0)/gameDurations.length : 0;
-  const maxGame = gameDurations.length ? Math.max(...gameDurations) : 0;
+  for (const pt of pointLog) {
+    const who = pt.who;
+    const opp = who==="a"?"b":"a";
+    currentGame.points.push({who, pA, pB, deuce, adv});
 
-  // Set durations
-  const setDurations = [];
-  for (let i=1; i<setTs.length; i++) setDurations.push(setTs[i]-setTs[i-1]);
+    // Advance score
+    if (deuce) {
+      if (adv===who) {
+        // game won
+        if (who==="a") gamesA++; else gamesB++;
+        const isBreak = server!==who;
+        games.push({...currentGame, winner:who, isBreak,
+          setScore:`${gamesA}-${gamesB}`, server});
+        pA=0;pB=0;deuce=false;adv=null;
+        server = server==="a"?"b":"a";
+        // check set
+        const gw=who==="a"?gamesA:gamesB, go=who==="a"?gamesB:gamesA;
+        if ((gw>=6&&gw-go>=2)||gw===7) {
+          if(who==="a")setsA++;else setsB++;
+          gamesA=0;gamesB=0;
+        }
+        currentGame={points:[],setScore:`${gamesA}-${gamesB}`,gameScore:"0-0",server};
+      } else if (adv===opp) { adv=null; }
+      else { adv=who; }
+    } else {
+      if (who==="a") pA++; else pB++;
+      if (pA===3&&pB===3) { deuce=true; pA=3;pB=3; }
+      else if (pA===4||pB===4) {
+        const w=pA===4?"a":"b";
+        if(w==="a")gamesA++;else gamesB++;
+        const isBreak=server!==w;
+        games.push({...currentGame,winner:w,isBreak,
+          setScore:`${gamesA}-${gamesB}`,server});
+        pA=0;pB=0;deuce=false;adv=null;
+        server=server==="a"?"b":"a";
+        const gw=w==="a"?gamesA:gamesB,go=w==="a"?gamesB:gamesA;
+        if((gw>=6&&gw-go>=2)||gw===7){
+          if(w==="a")setsA++;else setsB++;
+          gamesA=0;gamesB=0;
+        }
+        currentGame={points:[],setScore:`${gamesA}-${gamesB}`,gameScore:"0-0",server};
+      }
+    }
+  }
+  return games.reverse(); // newest first
+}
 
-  // Points per player
-  const ptsA = pointLog.filter(p=>p.who==="a").length;
-  const ptsB = pointLog.filter(p=>p.who==="b").length;
+function PointsHistory({live, nameA, nameB}) {
+  const PTS = [0,15,30,40,"AD"];
+  const games = buildGameHistory(live, nameA, nameB);
+  const [expanded, setExpanded] = useState(0); // which game is expanded
 
-  const row = (label, val) => (
-    <div key={label} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #1e293b"}}>
-      <span style={{color:"#64748b",fontSize:13}}>{label}</span>
-      <span style={{color:"#e2e8f0",fontWeight:600,fontSize:13}}>{val}</span>
-    </div>
+  if (games.length===0) return (
+    <div style={{textAlign:"center",color:"#64748b",padding:"40px 0",fontSize:13}}>No completed games yet</div>
   );
 
   return (
-    <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:"16px",marginTop:16}}>
-      <div style={{fontWeight:700,color:"#fff",marginBottom:12,fontSize:14}}>📊 Match Stats</div>
-      {row("Match Duration", fmt(elapsed))}
-      {row(`Total Points (${nameA})`, ptsA)}
-      {row(`Total Points (${nameB})`, ptsB)}
-      {row("Total Games", live.totalGames||0)}
-      {avgGame>0&&row("Avg Game Duration", fmt(avgGame))}
-      {maxGame>0&&row("Longest Game", fmt(maxGame))}
-      {setDurations.map((d,i)=>row(`Set ${i+1} Duration`, fmt(d)))}
-      {sets.map((s,i)=>(
-        <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #1e293b"}}>
-          <span style={{color:"#64748b",fontSize:13}}>Set {i+1}</span>
-          <span style={{color:s.a>s.b?"#34d399":"#f87171",fontWeight:600,fontSize:13}}>{s.a}-{s.b} {s.a>s.b?nameA:nameB}</span>
+    <div style={{marginTop:8}}>
+      {games.map((g,i)=>{
+        const winnerName = g.winner==="a"?nameA:nameB;
+        const isOpen = expanded===i;
+        return (
+          <div key={i} style={{marginBottom:8,border:"1px solid #1e293b",borderRadius:10,overflow:"hidden"}}>
+            {/* Game header */}
+            <div onClick={()=>setExpanded(isOpen?-1:i)}
+              style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                padding:"10px 14px",background:isOpen?"#1e293b":"#111827",cursor:"pointer"}}>
+              <div>
+                <span style={{fontSize:12,color:"#64748b"}}>Score: ({g.setScore}) </span>
+                <span style={{fontSize:12,fontWeight:700,color:"#e2e8f0"}}>Won by {winnerName}</span>
+                {g.isBreak&&<span style={{marginLeft:8,fontSize:10,background:"#7c3aed33",color:"#a78bfa",padding:"2px 6px",borderRadius:4,fontWeight:700}}>BREAK</span>}
+              </div>
+              <span style={{color:"#64748b",fontSize:12}}>{isOpen?"▲":"▼"}</span>
+            </div>
+            {/* Point detail */}
+            {isOpen&&(
+              <div style={{padding:"12px 14px",background:"#0e1320"}}>
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"6px 12px",alignItems:"center"}}>
+                  <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>{nameA.split("/")[0]}</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {g.points.map((p,j)=>{
+                      const pts = p.deuce?"40":PTS[p.pA]?.toString()||"0";
+                      const isCurrent = p.who==="a";
+                      return <span key={j} style={{fontSize:12,fontWeight:isCurrent?700:400,color:isCurrent?"#34d399":"#64748b",minWidth:24,textAlign:"center"}}>{pts}</span>;
+                    })}
+                    <span style={{fontSize:12,fontWeight:700,color:g.winner==="a"?"#34d399":"#64748b"}}>
+                      {g.winner==="a"?"✓":""}
+                    </span>
+                  </div>
+                  <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>{nameB.split("/")[0]}</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {g.points.map((p,j)=>{
+                      const pts = p.deuce?"40":PTS[p.pB]?.toString()||"0";
+                      const isCurrent = p.who==="b";
+                      return <span key={j} style={{fontSize:12,fontWeight:isCurrent?700:400,color:isCurrent?"#34d399":"#64748b",minWidth:24,textAlign:"center"}}>{pts}</span>;
+                    })}
+                    <span style={{fontSize:12,fontWeight:700,color:g.winner==="b"?"#34d399":"#64748b"}}>
+                      {g.winner==="b"?"✓":""}
+                    </span>
+                  </div>
+                </div>
+                <div style={{marginTop:8,fontSize:10,color:"#475569"}}>
+                  {g.server==="a"?nameA:nameB} serving · {g.points.length} points played
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MomentumChart({live, nameA, nameB}) {
+  const pointLog = live.pointLog||[];
+  if (pointLog.length<2) return (
+    <div style={{textAlign:"center",color:"#64748b",padding:"40px 0",fontSize:13}}>Not enough points yet</div>
+  );
+
+  // Rolling momentum: last 5 points won by each player
+  const W=5, bars=[];
+  for (let i=W; i<=pointLog.length; i++) {
+    const window = pointLog.slice(i-W,i);
+    const wA = window.filter(p=>p.who==="a").length;
+    bars.push({wA, wB:W-wA, idx:i});
+  }
+
+  return (
+    <div style={{marginTop:8,padding:"0 4px"}}>
+      <div style={{fontSize:11,color:"#64748b",marginBottom:12,textAlign:"center"}}>Rolling momentum (last 5 points)</div>
+      <div style={{display:"flex",alignItems:"flex-end",gap:3,height:80,justifyContent:"center"}}>
+        {bars.map((b,i)=>(
+          <div key={i} style={{display:"flex",flexDirection:"column",gap:1,flex:1,maxWidth:16}}>
+            <div style={{height:`${b.wA/W*100}%`,minHeight:2,background:"#3b82f6",borderRadius:"2px 2px 0 0"}}/>
+            <div style={{height:`${b.wB/W*100}%`,minHeight:2,background:"#10b981",borderRadius:"0 0 2px 2px"}}/>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:8,fontSize:11}}>
+        <span style={{color:"#3b82f6",fontWeight:600}}>■ {nameA.split("/")[0]}</span>
+        <span style={{color:"#10b981",fontWeight:600}}>{nameB.split("/")[0]} ■</span>
+      </div>
+    </div>
+  );
+}
+
+function computeStats(live, setFilter) {
+  const pointLog = (live.pointLog||[]).filter(p =>
+    setFilter === "match" ? true : p.set === parseInt(setFilter)-1
+  );
+  const games = buildGameHistory(live, "", "");
+
+  // Points won on serve / return
+  const serveWonA  = pointLog.filter(p=>p.who==="a" && p.server==="a").length;
+  const serveTotA  = pointLog.filter(p=>p.server==="a").length;
+  const serveWonB  = pointLog.filter(p=>p.who==="b" && p.server==="b").length;
+  const serveTotB  = pointLog.filter(p=>p.server==="b").length;
+  const returnWonA = pointLog.filter(p=>p.who==="a" && p.server==="b").length;
+  const returnTotA = pointLog.filter(p=>p.server==="b").length;
+  const returnWonB = pointLog.filter(p=>p.who==="b" && p.server==="a").length;
+  const returnTotB = pointLog.filter(p=>p.server==="a").length;
+
+  const ptsA = pointLog.filter(p=>p.who==="a").length;
+  const ptsB = pointLog.filter(p=>p.who==="b").length;
+  const total = ptsA+ptsB;
+
+  const breakGames = games.filter(g=>g.isBreak);
+  const breaksA = breakGames.filter(g=>g.winner==="a").length;
+  const breaksB = breakGames.filter(g=>g.winner==="b").length;
+  const breakChancesA = games.filter(g=>g.server==="b").length;
+  const breakChancesB = games.filter(g=>g.server==="a").length;
+
+  const gameTs = live.gameTs||[];
+  const gameDurations = [];
+  for (let i=1;i<gameTs.length;i++) gameDurations.push(gameTs[i]-gameTs[i-1]);
+  const avgGame = gameDurations.length ? gameDurations.reduce((s,v)=>s+v,0)/gameDurations.length : 0;
+  const maxGame = gameDurations.length ? Math.max(...gameDurations) : 0;
+
+  return { ptsA,ptsB,total,serveWonA,serveTotA,serveWonB,serveTotB,
+    returnWonA,returnTotA,returnWonB,returnTotB,
+    breaksA,breaksB,breakChancesA,breakChancesB,avgGame,maxGame };
+}
+
+function StatRow({label, vA, vB, barA, barB}) {
+  const maxBar = Math.max(barA||0, barB||0, 1);
+  return (
+    <div style={{marginBottom:12}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:8,marginBottom:4}}>
+        <div style={{textAlign:"right"}}>
+          <span style={{fontWeight:700,fontSize:13,color:"#93c5fd"}}>{vA}</span>
         </div>
+        <div style={{textAlign:"center",fontSize:11,color:"#64748b",width:120}}>{label}</div>
+        <div style={{textAlign:"left"}}>
+          <span style={{fontWeight:700,fontSize:13,color:"#34d399"}}>{vB}</span>
+        </div>
+      </div>
+      {(barA!==undefined||barB!==undefined)&&(
+        <div style={{display:"grid",gridTemplateColumns:"1fr 120px 1fr",gap:8,alignItems:"center"}}>
+          <div style={{display:"flex",justifyContent:"flex-end"}}>
+            <div style={{height:4,width:`${(barA/maxBar)*100}%`,background:"#3b82f6",borderRadius:2,minWidth:barA>0?4:0}}/>
+          </div>
+          <div/>
+          <div>
+            <div style={{height:4,width:`${(barB/maxBar)*100}%`,background:"#10b981",borderRadius:2,minWidth:barB>0?4:0}}/>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MatchMetrics({live, nameA, nameB}) {
+  const now = Date.now();
+  const elapsed = now-(live.startTs||now);
+  const sets = live.sets||[];
+  const setTs = live.setTs||[];
+  const setDurations = [];
+  for(let i=1;i<setTs.length;i++) setDurations.push(setTs[i]-setTs[i-1]);
+
+  const [setFilter, setSetFilter] = useState("match");
+  const s = computeStats(live, setFilter);
+
+  const pct = (w,t) => t>0 ? `${w}/${t} (${Math.round(w/t*100)}%)` : "0/0 (0%)";
+
+  const subTabs = ["match",...sets.map((_,i)=>`Set ${i+1}`)];
+
+  return (
+    <div style={{marginTop:8}}>
+      {/* Sub-tabs: match / set 1 / set 2 */}
+      <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+        {subTabs.map((t,i)=>{
+          const key = i===0?"match":i.toString();
+          return (
+            <button key={t} onClick={()=>setSetFilter(key)}
+              style={{padding:"5px 14px",border:"1px solid",borderRadius:20,fontSize:12,cursor:"pointer",
+                borderColor:setFilter===key?"#3b82f6":"#334155",
+                background:setFilter===key?"#1e3a5f":"#111827",
+                color:setFilter===key?"#93c5fd":"#64748b",fontWeight:setFilter===key?700:400}}>
+              {t}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Header */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 120px 1fr",gap:8,marginBottom:12}}>
+        <div style={{textAlign:"right",fontSize:12,color:"#3b82f6",fontWeight:700}}>{nameA.split("/")[0].toUpperCase()}</div>
+        <div/>
+        <div style={{textAlign:"left",fontSize:12,color:"#10b981",fontWeight:700}}>{nameB.split("/")[0].toUpperCase()}</div>
+      </div>
+
+      {/* Serve section */}
+      <div style={{fontSize:11,color:"#64748b",letterSpacing:1.5,textTransform:"uppercase",marginBottom:10,textAlign:"center",
+        padding:"6px",background:"#0f172a",borderRadius:6}}>Serve</div>
+      <StatRow label="Total Points Won" vA={pct(s.serveWonA,s.serveTotA)} vB={pct(s.serveWonB,s.serveTotB)} barA={s.serveWonA} barB={s.serveWonB}/>
+      <StatRow label="Break Points Saved" vA={`${breakSaved(s,"a")}`} vB={`${breakSaved(s,"b")}`} barA={breakSavedN(s,"a")} barB={breakSavedN(s,"b")}/>
+
+      {/* Return section */}
+      <div style={{fontSize:11,color:"#64748b",letterSpacing:1.5,textTransform:"uppercase",margin:"12px 0 10px",textAlign:"center",
+        padding:"6px",background:"#0f172a",borderRadius:6}}>Return</div>
+      <StatRow label="Return Points Won" vA={pct(s.returnWonA,s.returnTotA)} vB={pct(s.returnWonB,s.returnTotB)} barA={s.returnWonA} barB={s.returnWonB}/>
+      <StatRow label="Breaks Won" vA={`${s.breaksA}/${s.breakChancesA}`} vB={`${s.breaksB}/${s.breakChancesB}`} barA={s.breaksA} barB={s.breaksB}/>
+
+      {/* Overall section */}
+      <div style={{fontSize:11,color:"#64748b",letterSpacing:1.5,textTransform:"uppercase",margin:"12px 0 10px",textAlign:"center",
+        padding:"6px",background:"#0f172a",borderRadius:6}}>Overall</div>
+      <StatRow label="Total Points" vA={s.ptsA.toString()} vB={s.ptsB.toString()} barA={s.ptsA} barB={s.ptsB}/>
+      <StatRow label="Total Games" vA={(live.totalGames||0).toString()} vB="" />
+      {s.avgGame>0&&<StatRow label="Avg Game Time" vA={fmt(s.avgGame)} vB=""/>}
+      {s.maxGame>0&&<StatRow label="Longest Game" vA={fmt(s.maxGame)} vB=""/>}
+      <StatRow label="Match Time" vA={fmt(elapsed)} vB=""/>
+      {setDurations.map((d,i)=>(
+        <StatRow key={i} label={`Set ${i+1} Duration`} vA={fmt(d)} vB=""/>
       ))}
     </div>
   );
+}
+
+function breakSaved(s,side) {
+  if(side==="a") { const t=s.breakChancesB; const w=s.breaksB; return t>0?`${t-w}/${t} (${Math.round((t-w)/t*100)}%)`:"0/0 (0%)"; }
+  const t=s.breakChancesA; const w=s.breaksA; return t>0?`${t-w}/${t} (${Math.round((t-w)/t*100)}%)`:"0/0 (0%)";
+}
+function breakSavedN(s,side) {
+  if(side==="a") return Math.max(0,s.breakChancesB-s.breaksB);
+  return Math.max(0,s.breakChancesA-s.breaksA);
 }
 
 function TossScreen({nameA, nameB, onTossResult}) {
@@ -355,7 +603,7 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
   const sw = setsWon(live);
   const over = matchOver(live);
   const nameA = m.a, nameB = m.b;
-  const [showStats, setShowStats] = useState(false);
+  const [activeTab, setActiveTab] = useState(null); // null | "points" | "momentum" | "stats" 
   const canUndo = isKeeper && (live.history||[]).length > 0;
 
   const bigNum = {fontSize:56,fontWeight:900,lineHeight:1,color:"#fff"};
@@ -382,7 +630,14 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
           {live.startTs&&<span style={{color:"#64748b",fontSize:11,marginLeft:4}}>· {fmt(Date.now()-live.startTs)}</span>}
         </div>
         <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>setShowStats(v=>!v)} style={{background:"#1e293b",border:"none",borderRadius:6,color:"#64748b",cursor:"pointer",padding:"5px 10px",fontSize:12}}>📊</button>
+          <div style={{display:"flex",gap:4}}>
+            {[["points","📋"],["momentum","📈"],["stats","📊"]].map(([id,icon])=>(
+              <button key={id} onClick={()=>setActiveTab(t=>t===id?null:id)}
+                style={{background:activeTab===id?"#3b82f6":"#1e293b",border:"none",borderRadius:6,color:activeTab===id?"#fff":"#64748b",cursor:"pointer",padding:"5px 8px",fontSize:12}}>
+                {icon}
+              </button>
+            ))}
+          </div>
           <button onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:20,cursor:"pointer"}}>×</button>
         </div>
       </div>
@@ -498,8 +753,10 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
           </div>
         )}
 
-        {/* Stats panel */}
-        {showStats&&<MatchMetrics live={live} nameA={nameA} nameB={nameB}/>}
+        {/* Tab panels */}
+        {activeTab==="points"&&<PointsHistory live={live} nameA={nameA} nameB={nameB}/>}
+        {activeTab==="momentum"&&<MomentumChart live={live} nameA={nameA} nameB={nameB}/>}
+        {activeTab==="stats"&&<MatchMetrics live={live} nameA={nameA} nameB={nameB}/>}
       </div>
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}`}</style>
     </div>
@@ -1395,9 +1652,7 @@ function LoginPage({ onLogin }) {
             marginBottom:44,
             animation:"fadeUp .7s .3s ease both", opacity:0, animationFillMode:"both",
           }}>
-            {[["8","Doubles
-Teams"],["10","Singles
-Players"],["2","Leagues"]].map(([n,l])=>(
+            {[["8","Doubles Teams"],["10","Singles Players"],["2","Leagues"]].map(([n,l])=>(
               <div key={l} style={{textAlign:"center"}}>
                 <div style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(30px,5vw,44px)",fontWeight:900,color:"#4ade80",lineHeight:1}}>{n}</div>
                 <div style={{fontSize:10,color:"rgba(255,255,255,.3)",letterSpacing:2,textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",marginTop:6,lineHeight:1.4}}>{l}</div>
