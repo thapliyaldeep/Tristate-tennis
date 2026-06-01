@@ -1190,15 +1190,23 @@ function PollsTab({data, upd, allPlayers, firebaseUser}) {
         winnings[uid] = (winnings[uid]||0) + (b.amount/totalWin)*totalPool;
       }
     }
-    // Build entries from betPoints
-    const entries = Object.entries(betPoints).map(([uid, val]) => {
-      const pts  = typeof val==='object' ? (val.pts??START_POINTS) : (typeof val==='number' ? val : START_POINTS);
-      const name = typeof val==='object' ? (val.name||null) : null;
+    // Use all registered users as base, merge with betPoints
+    const registeredUsers = data.users || {};
+    const allUids = new Set([
+      ...Object.keys(registeredUsers),
+      ...Object.keys(betPoints),
+      ...(user ? [user] : [])
+    ]);
+    const entries = [...allUids].map(uid => {
+      const val  = betPoints[uid];
+      const pts  = val ? (typeof val==='object' ? (val.pts??START_POINTS) : (typeof val==='number' ? val : START_POINTS)) : START_POINTS;
       const total = Math.round(pts + (winnings[uid]||0));
-      const displayName = uid===user ? userName : (name || (uid.length>20 ? uid.slice(0,8)+"…" : uid));
+      // Get name from betPoints, users node, or current user
+      const storedName = typeof val==='object' ? val.name : null;
+      const regName    = registeredUsers[uid]?.name || registeredUsers[uid]?.email?.split("@")[0] || null;
+      const displayName = uid===user ? userName : (storedName || regName || (uid.length>20 ? uid.slice(0,8)+"…" : uid));
       return { uid, n:displayName, pts:isNaN(total)?START_POINTS:total };
     });
-    if (user && !betPoints[user]) entries.push({uid:user, n:userName, pts:START_POINTS});
     return entries.sort((a,b)=>b.pts-a.pts);
   }
 
@@ -1445,6 +1453,7 @@ export default function App() {
           tournPoll:r.tournPoll|| {doubles:{},singles:{}},
           bets:     r.bets     || {},
           betPoints:r.betPoints|| {},
+          users:    r.users    || {},
         };
         setData(safe);
         if(init) setStatus("ok");
