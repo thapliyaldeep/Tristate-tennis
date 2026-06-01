@@ -1071,6 +1071,18 @@ function PollsTab({data, upd, allPlayers, firebaseUser}) {
   const [betAmt, setBetAmt]   = useState({});
   const [section, setSection] = useState("polls");
 
+  // Register new user with starting points on first visit
+  useEffect(()=>{
+    if (!user || !userName) return;
+    const existing = data.betPoints?.[user];
+    if (!existing) {
+      upd(d=>({...d, betPoints:{...d.betPoints, [user]:{pts:START_POINTS, name:userName}}}));
+    } else if (typeof existing === 'object' && !existing.name) {
+      // Update name if missing
+      upd(d=>({...d, betPoints:{...d.betPoints, [user]:{...existing, name:userName}}}));
+    }
+  },[user, userName]);
+
   // UID-based vote tracking — checks Firebase data directly, no localStorage needed
   function hasVoted(key) {
     if (!user) return false;
