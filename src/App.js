@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
+import { useAuth, LoginPage, PendingApproval, AdminPanel, signOut, auth } from "./Auth";
 
 const FB_URL = "https://tristate-tennis-default-rtdb.firebaseio.com/state.json";
 
 // Stable device ID — set once at module load, persists in localStorage
+const ADMIN_EMAIL = "deepcolour@gmail.com";
+
 const DEVICE_ID = (() => {
   try {
     let id = localStorage.getItem("tristate_device_id");
@@ -1392,423 +1395,10 @@ function PollsTab({data, upd, allPlayers}) {
 }
 
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
-const CREDENTIALS = {
-  "nitin":"TriTennis$$1","ashish":"TriTennis$$1","jai":"TriTennis$$1","deep":"TriTennis$$1",
-  "tarun":"TriTennis$$1","sumit":"TriTennis$$1","bobby":"TriTennis$$1","satendra":"TriTennis$$1",
-  "akash":"TriTennis$$1","micky":"TriTennis$$1","dhar":"TriTennis$$1","vineet":"TriTennis$$1",
-  "sanjay":"TriTennis$$1","ravi":"TriTennis$$1","shailesh":"TriTennis$$1","uzair":"TriTennis$$1",
-  "pratyush":"TriTennis$$1","viraj":"TriTennis$$1","tushar":"TriTennis$$1","admin":"TriTennis$$1",
-};
-const AUTH_KEY = "tristate_auth";
-function getAuth() { try { return JSON.parse(sessionStorage.getItem(AUTH_KEY)||"null"); } catch { return null; } }
-function setAuth(u) { try { sessionStorage.setItem(AUTH_KEY, JSON.stringify(u)); } catch {} }
-function clearAuth() { try { sessionStorage.removeItem(AUTH_KEY); } catch {} }
-
-// ── SVG Player Silhouettes ────────────────────────────────────────────────────
-function PlayerLeft() {
-  // Serve stance silhouette
-  return (
-    <svg viewBox="0 0 120 220" style={{width:"100%",height:"100%",filter:"drop-shadow(0 0 24px rgba(74,222,128,0.25))"}}>
-      <g fill="rgba(255,255,255,0.12)" stroke="rgba(74,222,128,0.3)" strokeWidth="0.5">
-        {/* Head */}
-        <circle cx="60" cy="22" r="13"/>
-        {/* Body */}
-        <path d="M48 35 Q60 32 72 35 L76 90 Q60 95 44 90 Z"/>
-        {/* Left arm up (serving) */}
-        <path d="M48 45 Q30 30 18 10 Q22 8 26 10 Q36 28 50 44 Z"/>
-        {/* Right arm with racket */}
-        <path d="M72 45 Q90 35 108 25 Q110 29 108 32 Q90 42 74 50 Z"/>
-        {/* Racket head */}
-        <ellipse cx="112" cy="22" rx="10" ry="13" fill="none" stroke="rgba(74,222,128,0.5)" strokeWidth="2"/>
-        <line x1="102" y1="22" x2="122" y2="22" stroke="rgba(74,222,128,0.3)" strokeWidth="0.5"/>
-        <line x1="112" y1="9" x2="112" y2="35" stroke="rgba(74,222,128,0.3)" strokeWidth="0.5"/>
-        {/* Left leg */}
-        <path d="M50 90 Q44 130 40 160 Q44 162 50 160 Q54 132 58 92 Z"/>
-        {/* Right leg */}
-        <path d="M70 90 Q76 130 80 160 Q76 162 70 160 Q66 132 62 92 Z"/>
-        {/* Shoes */}
-        <ellipse cx="44" cy="163" rx="10" ry="4"/>
-        <ellipse cx="76" cy="163" rx="10" ry="4"/>
-      </g>
-    </svg>
-  );
-}
-
-function PlayerRight() {
-  // Forehand swing silhouette (mirrored)
-  return (
-    <svg viewBox="0 0 120 220" style={{width:"100%",height:"100%",transform:"scaleX(-1)",filter:"drop-shadow(0 0 24px rgba(250,204,21,0.2))"}}>
-      <g fill="rgba(255,255,255,0.10)" stroke="rgba(250,204,21,0.25)" strokeWidth="0.5">
-        {/* Head */}
-        <circle cx="60" cy="22" r="13"/>
-        {/* Body crouched forward */}
-        <path d="M46 35 Q60 30 74 35 L80 88 Q60 96 40 88 Z"/>
-        {/* Right arm swinging */}
-        <path d="M74 50 Q95 60 115 55 Q116 60 114 63 Q93 68 72 58 Z"/>
-        {/* Racket */}
-        <ellipse cx="118" cy="58" rx="9" ry="12" fill="none" stroke="rgba(250,204,21,0.5)" strokeWidth="2"/>
-        <line x1="109" y1="58" x2="127" y2="58" stroke="rgba(250,204,21,0.3)" strokeWidth="0.5"/>
-        <line x1="118" y1="46" x2="118" y2="70" stroke="rgba(250,204,21,0.3)" strokeWidth="0.5"/>
-        {/* Left arm balance */}
-        <path d="M46 45 Q28 40 14 45 Q13 50 16 52 Q29 46 48 52 Z"/>
-        {/* Legs wide stance */}
-        <path d="M46 88 Q36 128 30 160 Q36 163 42 160 Q46 130 54 90 Z"/>
-        <path d="M74 88 Q84 128 90 160 Q84 163 78 160 Q74 130 66 90 Z"/>
-        {/* Shoes */}
-        <ellipse cx="34" cy="163" rx="11" ry="4"/>
-        <ellipse cx="86" cy="163" rx="11" ry="4"/>
-      </g>
-    </svg>
-  );
-}
-
-function TennisBall({size=60, glow=true}) {
-  return (
-    <svg viewBox="0 0 100 100" width={size} height={size}>
-      <defs>
-        <radialGradient id="ballGrad" cx="35%" cy="30%" r="65%">
-          <stop offset="0%" stopColor="#d9f99d"/>
-          <stop offset="50%" stopColor="#84cc16"/>
-          <stop offset="100%" stopColor="#4d7c0f"/>
-        </radialGradient>
-        {glow && <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>}
-      </defs>
-      <circle cx="50" cy="50" r="48" fill="url(#ballGrad)" filter={glow?"url(#glow)":undefined}/>
-      {/* Seam curves */}
-      <path d="M20 35 Q50 50 80 35" fill="none" stroke="white" strokeWidth="3" strokeOpacity="0.6"/>
-      <path d="M20 65 Q50 50 80 65" fill="none" stroke="white" strokeWidth="3" strokeOpacity="0.6"/>
-      <path d="M35 20 Q50 50 35 80" fill="none" stroke="white" strokeWidth="3" strokeOpacity="0.6"/>
-      <path d="M65 20 Q50 50 65 80" fill="none" stroke="white" strokeWidth="3" strokeOpacity="0.6"/>
-    </svg>
-  );
-}
-
-function LoginPage({ onLogin }) {
-  const [phase, setPhase]       = useState("landing");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError]       = useState("");
-  const [showPass, setShowPass] = useState(false);
-  const [loading, setLoading]   = useState(false);
-
-  function handleLogin(e) {
-    e.preventDefault();
-    setLoading(true); setError("");
-    setTimeout(() => {
-      const u = username.trim().toLowerCase();
-      if (CREDENTIALS[u] && CREDENTIALS[u] === password) {
-        setAuth({ username: u }); onLogin(u);
-      } else {
-        setError("Invalid username or password"); setLoading(false);
-      }
-    }, 700);
-  }
-
-  return (
-    <div style={{
-      minHeight:"100vh", background:"#050a12",
-      display:"flex", flexDirection:"column",
-      fontFamily:"'Georgia','Times New Roman',serif",
-      position:"relative", overflow:"hidden",
-    }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=DM+Sans:wght@300;400;500&display=swap');
-        @keyframes floatBall { 0%,100%{transform:translateY(0) rotate(0deg)} 50%{transform:translateY(-18px) rotate(200deg)} }
-        @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes fadeIn { from{opacity:0} to{opacity:1} }
-        @keyframes shimmer { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }
-        @keyframes scanline { 0%{transform:translateY(-100%)} 100%{transform:translateY(100vh)} }
-        @keyframes pulse3 { 0%,100%{opacity:.5;transform:scale(1)} 50%{opacity:1;transform:scale(1.08)} }
-        @keyframes spin { to{transform:rotate(360deg)} }
-        @keyframes slideLeft { from{opacity:0;transform:translateX(-40px)} to{opacity:1;transform:translateX(0)} }
-        @keyframes slideRight { from{opacity:0;transform:translateX(40px)} to{opacity:1;transform:translateX(0)} }
-        .login-input { transition:border-color .2s,box-shadow .2s !important; }
-        .login-input:focus { border-color:#4ade80 !important; outline:none !important; box-shadow:0 0 0 3px rgba(74,222,128,.15) !important; }
-        .enter-btn { transition:all .2s !important; }
-        .enter-btn:hover:not(:disabled) { transform:translateY(-2px) !important; box-shadow:0 16px 48px rgba(74,222,128,.35) !important; }
-        .enter-btn:active:not(:disabled) { transform:translateY(0) !important; }
-      `}</style>
-
-      {/* ── Court background ── */}
-      <div style={{position:"absolute",inset:0,zIndex:0}}>
-        {/* Base gradient */}
-        <div style={{position:"absolute",inset:0,background:"linear-gradient(160deg,#050a12 0%,#071a10 40%,#050e1a 70%,#050a12 100%)"}}/>
-        {/* Court surface */}
-        <div style={{position:"absolute",bottom:0,left:0,right:0,height:"45%",background:"linear-gradient(180deg,transparent,rgba(20,83,45,.12))"}}/>
-        {/* Court lines */}
-        <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:.07}} viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
-          {/* Baseline */}
-          <line x1="120" y1="720" x2="1320" y2="720" stroke="#4ade80" strokeWidth="2"/>
-          {/* Singles sidelines */}
-          <line x1="120" y1="180" x2="120" y2="720" stroke="#4ade80" strokeWidth="2"/>
-          <line x1="1320" y1="180" x2="1320" y2="720" stroke="#4ade80" strokeWidth="2"/>
-          {/* Service line */}
-          <line x1="120" y1="450" x2="1320" y2="450" stroke="#4ade80" strokeWidth="2"/>
-          {/* Center service line */}
-          <line x1="720" y1="180" x2="720" y2="720" stroke="#4ade80" strokeWidth="2"/>
-          {/* Net */}
-          <line x1="120" y1="180" x2="1320" y2="180" stroke="#4ade80" strokeWidth="3"/>
-          {/* Net posts */}
-          <line x1="120" y1="130" x2="120" y2="180" stroke="#4ade80" strokeWidth="4"/>
-          <line x1="1320" y1="130" x2="1320" y2="180" stroke="#4ade80" strokeWidth="4"/>
-          {/* Net mesh */}
-          {Array.from({length:20}).map((_,i)=>(
-            <line key={i} x1={120+i*60} y1="130" x2={120+i*60} y2="180" stroke="#4ade80" strokeWidth="0.5" opacity="0.5"/>
-          ))}
-        </svg>
-        {/* Ambient glow left */}
-        <div style={{position:"absolute",top:"20%",left:"-10%",width:500,height:600,borderRadius:"50%",background:"radial-gradient(circle,rgba(74,222,128,.06),transparent 70%)"}}/>
-        {/* Ambient glow right */}
-        <div style={{position:"absolute",top:"15%",right:"-10%",width:500,height:600,borderRadius:"50%",background:"radial-gradient(circle,rgba(250,204,21,.04),transparent 70%)"}}/>
-        {/* Scanline effect */}
-        <div style={{position:"absolute",inset:0,background:"repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.03) 3px,rgba(0,0,0,.03) 4px)",pointerEvents:"none"}}/>
-      </div>
-
-      {/* ── Photo collage ── */}
-      {phase==="landing" && (
-        <>
-          {/* Left photo panel */}
-          <div style={{position:"absolute",top:0,left:0,width:"22%",height:"100%",zIndex:1,animation:"slideLeft .9s .2s ease both",opacity:0,animationFillMode:"both",overflow:"hidden"}}>
-            <img src="https://images.unsplash.com/photo-1554068865-24cecd4e34b8?fm=jpg&q=80&w=800&auto=format&fit=crop" alt="Tennis" style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center top",filter:"brightness(.55) saturate(0.8)"}}/>
-            <div style={{position:"absolute",inset:0,background:"linear-gradient(90deg,rgba(5,10,18,.8),rgba(5,10,18,.2) 50%,transparent)"}}/>
-          </div>
-
-          {/* Right photo panel */}
-          <div style={{position:"absolute",top:0,right:0,width:"22%",height:"100%",zIndex:1,animation:"slideRight .9s .2s ease both",opacity:0,animationFillMode:"both",overflow:"hidden"}}>
-            <img src="https://images.unsplash.com/photo-1614743758466-e569f4791116?fm=jpg&q=80&w=800&auto=format&fit=crop" alt="Tennis" style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center top",filter:"brightness(.55) saturate(0.8)"}}/>
-            <div style={{position:"absolute",inset:0,background:"linear-gradient(-90deg,rgba(5,10,18,.8),rgba(5,10,18,.2) 50%,transparent)"}}/>
-          </div>
-
-          {/* Bottom left photo */}
-          <div style={{position:"absolute",bottom:0,left:"22%",width:"28%",height:"38%",zIndex:1,animation:"fadeIn .9s .5s ease both",opacity:0,animationFillMode:"both",overflow:"hidden"}}>
-            <img src="https://images.unsplash.com/flagged/photo-1576972405668-2d020a01cbfa?fm=jpg&q=80&w=800&auto=format&fit=crop" alt="Doubles tennis" style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center 30%",filter:"brightness(.5) saturate(0.7)"}}/>
-            <div style={{position:"absolute",inset:0,background:"linear-gradient(0deg,rgba(5,10,18,.95),rgba(5,10,18,.3) 60%,transparent)"}}/>
-          </div>
-
-          {/* Bottom right photo */}
-          <div style={{position:"absolute",bottom:0,right:"22%",width:"28%",height:"38%",zIndex:1,animation:"fadeIn .9s .7s ease both",opacity:0,animationFillMode:"both",overflow:"hidden"}}>
-            <img src="https://images.unsplash.com/photo-1637071692126-d0ee7df18271?fm=jpg&q=80&w=600&auto=format&fit=crop" alt="Tennis player" style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center 20%",filter:"brightness(.5) saturate(0.7)"}}/>
-            <div style={{position:"absolute",inset:0,background:"linear-gradient(0deg,rgba(5,10,18,.95),rgba(5,10,18,.3) 60%,transparent)"}}/>
-          </div>
-
-          {/* Tennis ball floating */}
-          {[
-            {bottom:"62%",left:"19%", size:26, delay:0,   dur:7 },
-            {bottom:"30%",left:"24%", size:14, delay:1.5, dur:9 },
-            {bottom:"58%",right:"19%",size:22, delay:.8,  dur:8 },
-            {bottom:"28%",right:"24%",size:12, delay:2.2, dur:11},
-          ].map((b,i)=>(
-            <div key={i} style={{position:"absolute",bottom:b.bottom,left:b.left,right:b.right,zIndex:2,animation:`floatBall ${b.dur}s ${b.delay}s ease-in-out infinite`}}>
-              <TennisBall size={b.size}/>
-            </div>
-          ))}
-
-          {/* Divider lines between panels */}
-          <div style={{position:"absolute",top:0,left:"22%",width:1,height:"100%",background:"linear-gradient(180deg,transparent,rgba(74,222,128,.2) 30%,rgba(74,222,128,.2) 70%,transparent)",zIndex:2}}/>
-          <div style={{position:"absolute",top:0,right:"22%",width:1,height:"100%",background:"linear-gradient(180deg,transparent,rgba(74,222,128,.2) 30%,rgba(74,222,128,.2) 70%,transparent)",zIndex:2}}/>
-        </>
-      )}
-
-      {/* ── Landing content ── */}
-      {phase==="landing" && (
-        <div style={{position:"relative",zIndex:3,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flex:1,padding:"40px 24px",textAlign:"center"}}>
-
-          {/* Season badge */}
-          <div style={{animation:"fadeUp .6s ease both",display:"inline-flex",alignItems:"center",gap:8,background:"rgba(74,222,128,.08)",border:"1px solid rgba(74,222,128,.2)",borderRadius:100,padding:"6px 18px",marginBottom:28,animation:"pulse3 3s ease infinite"}}>
-            <TennisBall size={14} glow={false}/>
-            <span style={{fontSize:11,color:"#4ade80",letterSpacing:3,textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}>Season 2026 · Members Only</span>
-          </div>
-
-          {/* Main title */}
-          <h1 style={{
-            fontFamily:"'Playfair Display',serif",
-            fontSize:"clamp(52px,10vw,96px)",
-            fontWeight:900, lineHeight:.95, margin:"0 0 8px",
-            letterSpacing:-2,
-            animation:"fadeUp .7s .1s ease both", opacity:0, animationFillMode:"both",
-          }}>
-            <span style={{
-              background:"linear-gradient(135deg,#ffffff 0%,#bbf7d0 40%,#4ade80 70%,#86efac 100%)",
-              WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent",
-              backgroundSize:"200% auto", animation:"shimmer 5s linear infinite",
-              display:"block",
-            }}>TRISTATE</span>
-            <span style={{
-              fontStyle:"italic",
-              background:"linear-gradient(135deg,#fef08a 0%,#facc15 50%,#eab308 100%)",
-              WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent",
-              display:"block", fontSize:"85%",
-            }}>Tennis</span>
-          </h1>
-
-          <p style={{
-            fontFamily:"'DM Sans',sans-serif", fontSize:"clamp(13px,2vw,16px)",
-            color:"rgba(255,255,255,.38)", lineHeight:1.7,
-            margin:"16px 0 40px", fontWeight:300, letterSpacing:.8,
-            maxWidth:380,
-            animation:"fadeUp .7s .2s ease both", opacity:0, animationFillMode:"both",
-          }}>
-            Your private league hub · Live scoring<br/>standings · banter · and more
-          </p>
-
-          {/* Stats */}
-          <div style={{
-            display:"flex", justifyContent:"center", gap:"clamp(24px,5vw,56px)",
-            marginBottom:44,
-            animation:"fadeUp .7s .3s ease both", opacity:0, animationFillMode:"both",
-          }}>
-            {[["8","Doubles Teams"],["10","Singles Players"],["2","Leagues"]].map(([n,l])=>(
-              <div key={l} style={{textAlign:"center"}}>
-                <div style={{fontFamily:"'Playfair Display',serif",fontSize:"clamp(30px,5vw,44px)",fontWeight:900,color:"#4ade80",lineHeight:1}}>{n}</div>
-                <div style={{fontSize:10,color:"rgba(255,255,255,.3)",letterSpacing:2,textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",marginTop:6,lineHeight:1.4}}>{l}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* CTA */}
-          <button className="enter-btn" onClick={()=>setPhase("login")} style={{
-            padding:"16px 52px", fontSize:15, fontWeight:500,
-            fontFamily:"'DM Sans',sans-serif", letterSpacing:1.5, textTransform:"uppercase",
-            background:"linear-gradient(135deg,#4ade80 0%,#16a34a 100%)",
-            border:"none", borderRadius:100, color:"#021a0a",
-            cursor:"pointer", boxShadow:"0 8px 32px rgba(74,222,128,.3)",
-            animation:"fadeUp .7s .4s ease both", opacity:0, animationFillMode:"both",
-          }}>
-            Enter the League
-          </button>
-
-          {/* Bottom decorative line */}
-          <div style={{marginTop:52,display:"flex",alignItems:"center",gap:16,opacity:.2}}>
-            <div style={{height:1,width:60,background:"linear-gradient(90deg,transparent,#4ade80)"}}/>
-            <TennisBall size={10} glow={false}/>
-            <div style={{height:1,width:60,background:"linear-gradient(90deg,#4ade80,transparent)"}}/>
-          </div>
-        </div>
-      )}
-
-      {/* ── Login form ── */}
-      {phase==="login" && (
-        <div style={{position:"relative",zIndex:3,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flex:1,padding:"40px 24px"}}>
-          <div style={{width:"100%",maxWidth:400,animation:"fadeUp .5s ease both"}}>
-
-            {/* Back */}
-            <button onClick={()=>{setPhase("landing");setError("");}} style={{background:"none",border:"none",color:"rgba(255,255,255,.3)",fontSize:13,cursor:"pointer",marginBottom:28,fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",gap:6,padding:0,transition:"color .2s"}}
-              onMouseOver={e=>e.currentTarget.style.color="rgba(255,255,255,.7)"}
-              onMouseOut={e=>e.currentTarget.style.color="rgba(255,255,255,.3)"}>
-              ← Back to home
-            </button>
-
-            {/* Card */}
-            <div style={{background:"rgba(255,255,255,.03)",backdropFilter:"blur(24px)",border:"1px solid rgba(255,255,255,.07)",borderRadius:20,padding:"36px 32px",boxShadow:"0 32px 80px rgba(0,0,0,.5)"}}>
-
-              {/* Header */}
-              <div style={{textAlign:"center",marginBottom:28}}>
-                <div style={{display:"flex",justifyContent:"center",marginBottom:12}}>
-                  <TennisBall size={44}/>
-                </div>
-                <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:"#fff",margin:"0 0 6px"}}>Members Login</h2>
-                <p style={{fontFamily:"'DM Sans',sans-serif",fontSize:13,color:"rgba(255,255,255,.35)",margin:0}}>Tristate Tennis League 2026</p>
-              </div>
-
-              <form onSubmit={handleLogin}>
-                {/* Username */}
-                <div style={{marginBottom:14}}>
-                  <label style={{display:"block",fontSize:10,color:"rgba(255,255,255,.35)",letterSpacing:2,textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",marginBottom:7}}>Username</label>
-                  <input className="login-input" type="text" value={username} onChange={e=>{setUsername(e.target.value);setError("");}}
-                    placeholder="your first name (lowercase)"
-                    autoCapitalize="none" autoCorrect="off" spellCheck={false}
-                    style={{width:"100%",padding:"12px 14px",fontSize:14,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.09)",borderRadius:10,color:"#fff",boxSizing:"border-box",fontFamily:"'DM Sans',sans-serif"}}/>
-                </div>
-
-                {/* Password */}
-                <div style={{marginBottom:22,position:"relative"}}>
-                  <label style={{display:"block",fontSize:10,color:"rgba(255,255,255,.35)",letterSpacing:2,textTransform:"uppercase",fontFamily:"'DM Sans',sans-serif",marginBottom:7}}>Password</label>
-                  <input className="login-input" type={showPass?"text":"password"} value={password} onChange={e=>{setPassword(e.target.value);setError("");}}
-                    placeholder="••••••••••"
-                    style={{width:"100%",padding:"12px 42px 12px 14px",fontSize:14,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.09)",borderRadius:10,color:"#fff",boxSizing:"border-box",fontFamily:"'DM Sans',sans-serif"}}/>
-                  <button type="button" onClick={()=>setShowPass(v=>!v)} style={{position:"absolute",right:12,bottom:12,background:"none",border:"none",color:"rgba(255,255,255,.25)",cursor:"pointer",fontSize:15,padding:0}}>
-                    {showPass?"🙈":"👁"}
-                  </button>
-                </div>
-
-                {/* Error */}
-                {error&&(
-                  <div style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.25)",borderRadius:8,padding:"10px 14px",marginBottom:18,fontSize:13,color:"#fca5a5",fontFamily:"'DM Sans',sans-serif"}}>
-                    ⚠️ {error}
-                  </div>
-                )}
-
-                {/* Submit */}
-                <button type="submit" className="enter-btn" disabled={loading||!username||!password} style={{
-                  width:"100%",padding:"13px",fontSize:14,fontWeight:500,
-                  fontFamily:"'DM Sans',sans-serif",letterSpacing:1,textTransform:"uppercase",
-                  background:loading||!username||!password?"rgba(74,222,128,.15)":"linear-gradient(135deg,#4ade80,#16a34a)",
-                  border:"none",borderRadius:10,
-                  color:loading||!username||!password?"rgba(255,255,255,.2)":"#021a0a",
-                  cursor:loading||!username||!password?"not-allowed":"pointer",
-                  display:"flex",alignItems:"center",justifyContent:"center",gap:8,
-                }}>
-                  {loading
-                    ? <><div style={{width:15,height:15,border:"2px solid rgba(2,26,10,.2)",borderTopColor:"#021a0a",borderRadius:"50%",animation:"spin .6s linear infinite"}}/> Signing in…</>
-                    : "Sign In →"
-                  }
-                </button>
-              </form>
-            </div>
-
-            <p style={{textAlign:"center",marginTop:20,fontSize:11,color:"rgba(255,255,255,.18)",fontFamily:"'DM Sans',sans-serif",letterSpacing:.5}}>
-              Contact your league admin for access
-            </p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-// ─── Completed Match Stats Viewer ────────────────────────────────────────────
-function CompletedMatchStats({m, onClose}) {
-  const [tab, setTab] = useState("points");
-  const live = m.matchStats;
-  return (
-    <div style={{position:"fixed",inset:0,background:"#07090f",zIndex:1000,display:"flex",flexDirection:"column",fontFamily:"system-ui,sans-serif"}}>
-      {/* Header */}
-      <div style={{background:"#0a1020",borderBottom:"1px solid #1e293b",padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-        <div>
-          <div style={{fontWeight:700,color:"#fff",fontSize:15}}>{m.a} vs {m.b}</div>
-          <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{m.date}{m.time?` · ${m.time}`:""} · {m.sa} / {m.sb}</div>
-        </div>
-        <button onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:20,cursor:"pointer"}}>×</button>
-      </div>
-      {/* Tab bar */}
-      <div style={{display:"flex",gap:0,background:"#111827",borderBottom:"1px solid #1e293b",flexShrink:0}}>
-        {[["points","📋 Points"],["momentum","📈 Momentum"],["stats","📊 Stats"]].map(([id,label])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{
-            flex:1,padding:"12px 4px",border:"none",cursor:"pointer",fontSize:13,
-            fontWeight:tab===id?700:400,
-            background:"transparent",
-            color:tab===id?"#93c5fd":"#64748b",
-            borderBottom:tab===id?"2px solid #3b82f6":"2px solid transparent",
-          }}>{label}</button>
-        ))}
-      </div>
-      {/* Content */}
-      <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
-        <div style={{maxWidth:500,margin:"0 auto"}}>
-          {tab==="points"&&<PointsHistory live={live} nameA={m.a} nameB={m.b}/>}
-          {tab==="momentum"&&<MomentumChart live={live} nameA={m.a} nameB={m.b}/>}
-          {tab==="stats"&&<MatchMetrics live={live} nameA={m.a} nameB={m.b}/>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [authedUser, setAuthedUser] = useState(()=>getAuth()?.username||null);
+  const { user: firebaseUser, approved, checking } = useAuth();
+  const [showAdmin, setShowAdmin] = useState(false);
   const [data,      setData]      = useState(null);
   const [status,    setStatus]    = useState("loading");
   const [tab,       setTab]       = useState("schedule");
@@ -1889,8 +1479,11 @@ export default function App() {
     return nd;
   }
 
-  // Show login if not authenticated
-  if (!authedUser) return <LoginPage onLogin={u=>{ setAuth({username:u}); setAuthedUser(u); }}/>;
+  // Firebase auth gates
+  if (checking) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#050a12",color:"#64748b",fontSize:15}}>🎾 Loading…</div>;
+  if (!firebaseUser) return <LoginPage onAuth={()=>{}}/>;
+  if (approved === false) return <PendingApproval user={firebaseUser} onSignOut={()=>signOut(auth)}/>;
+  if (approved === null) return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#050a12",color:"#64748b",fontSize:15}}>🎾 Checking access…</div>;
 
   if(status==="loading") return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#64748b",fontSize:15}}>🎾 Loading…</div>;
   if(status==="error")   return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#ef4444",fontSize:15,padding:24,textAlign:"center"}}>❌ Could not load data. Check connection and refresh.</div>;
@@ -2077,10 +1670,18 @@ export default function App() {
             </div>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
               <span style={{fontSize:11,color:statusColor}}>{statusText}</span>
-              <div style={{display:"flex",alignItems:"center",gap:8,background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.08)",borderRadius:20,padding:"4px 12px 4px 8px"}}>
-                <div style={{width:22,height:22,borderRadius:"50%",background:"linear-gradient(135deg,#4ade80,#16a34a)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#021a0a"}}>{authedUser[0].toUpperCase()}</div>
-                <span style={{fontSize:12,color:"rgba(255,255,255,.6)",fontWeight:500}}>{authedUser}</span>
-                <button onClick={()=>{ clearAuth(); setAuthedUser(null); }} style={{background:"none",border:"none",color:"rgba(255,255,255,.3)",cursor:"pointer",fontSize:11,padding:"0 0 0 4px"}}>✕</button>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                {firebaseUser.email===ADMIN_EMAIL&&(
+                  <button onClick={()=>setShowAdmin(true)} style={{background:"rgba(74,222,128,.1)",border:"1px solid rgba(74,222,128,.2)",borderRadius:16,padding:"4px 10px",color:"#4ade80",fontSize:11,cursor:"pointer",fontWeight:600}}>⚙️ Admin</button>
+                )}
+                <div style={{display:"flex",alignItems:"center",gap:6,background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.08)",borderRadius:20,padding:"4px 12px 4px 6px"}}>
+                  {firebaseUser.photoURL
+                    ?<img src={firebaseUser.photoURL} alt="" style={{width:22,height:22,borderRadius:"50%"}}/>
+                    :<div style={{width:22,height:22,borderRadius:"50%",background:"linear-gradient(135deg,#4ade80,#16a34a)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#021a0a"}}>{(firebaseUser.displayName||firebaseUser.email||"?")[0].toUpperCase()}</div>
+                  }
+                  <span style={{fontSize:11,color:"rgba(255,255,255,.6)",fontWeight:500,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{firebaseUser.displayName||firebaseUser.email?.split("@")[0]}</span>
+                  <button onClick={()=>signOut(auth)} style={{background:"none",border:"none",color:"rgba(255,255,255,.3)",cursor:"pointer",fontSize:11,padding:"0 0 0 4px"}}>✕</button>
+                </div>
               </div>
             </div>
           </div>
@@ -2288,6 +1889,9 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* Admin Panel */}
+      {showAdmin&&<AdminPanel onClose={()=>setShowAdmin(false)}/>}
 
       {/* MODALS */}
       {modal==="match"&&(
