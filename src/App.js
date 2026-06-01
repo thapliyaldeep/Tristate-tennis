@@ -1071,18 +1071,24 @@ function PollsTab({data, upd, allPlayers, firebaseUser}) {
   const [betAmt, setBetAmt]   = useState({});
   const [section, setSection] = useState("polls");
 
-  function hasDeviceVoted(key) {
+  // UID-based vote tracking — checks Firebase data directly, no localStorage needed
+  function hasVoted(key) {
     if (!user) return false;
-    try { return !!(JSON.parse(localStorage.getItem("tristate_device_votes")||"{}")[user+"_"+key]); } catch { return false; }
+    if (key.startsWith("poll_")) {
+      const matchId = key.replace("poll_","");
+      return !!(polls[matchId]?.[user]);
+    }
+    if (key.startsWith("tourn_")) {
+      const type = key.replace("tourn_","");
+      return !!(tournPoll[type]?.[user]);
+    }
+    if (key.startsWith("bet_")) {
+      const matchId = key.replace("bet_","");
+      return !!(bets[matchId]?.[user]);
+    }
+    return false;
   }
-  function markDeviceVote(key) {
-    if (!user) return;
-    try {
-      const v = JSON.parse(localStorage.getItem("tristate_device_votes")||"{}");
-      v[user+"_"+key] = true;
-      localStorage.setItem("tristate_device_votes", JSON.stringify(v));
-    } catch {}
-  }
+  function markDeviceVote() {} // no-op, kept for compatibility
 
   const polls     = data.polls     || {};
   const tournPoll = data.tournPoll || {doubles:{}, singles:{}};
@@ -1115,7 +1121,7 @@ function PollsTab({data, upd, allPlayers, firebaseUser}) {
   async function votePoll(matchId, side) {
     if (!user) { alert("Please sign in first!"); return; }
     const key = "poll_" + matchId;
-    if (hasDeviceVoted(key)) { alert("You have already voted on this match from this device!"); return; }
+    if (hasVoted(key)) { alert("You have already voted on this match from this device!"); return; }
     await upd(d=>({...d, polls:{...d.polls, [matchId]:{...(d.polls[matchId]||{}), [user]:side}}}));
     markDeviceVote(key);
   }
@@ -1123,7 +1129,7 @@ function PollsTab({data, upd, allPlayers, firebaseUser}) {
   async function voteTournament(type, name) {
     if (!user) { alert("Please sign in first!"); return; }
     const key = "tourn_" + type;
-    if (hasDeviceVoted(key)) { alert("You have already voted on this tournament from this device!"); return; }
+    if (hasVoted(key)) { alert("You have already voted on this tournament from this device!"); return; }
     await upd(d=>({...d, tournPoll:{...d.tournPoll, [type]:{...(d.tournPoll[type]||{}), [user]:name}}}));
     markDeviceVote(key);
   }
@@ -1148,7 +1154,7 @@ function PollsTab({data, upd, allPlayers, firebaseUser}) {
     if (!user || !amount || amount<1) return;
     if (amount > myPoints) return;
     const key = "bet_" + m.id;
-    if (hasDeviceVoted(key)) { alert("You have already placed a bet on this match from this device!"); return; }
+    if (hasVoted(key)) { alert("You have already placed a bet on this match from this device!"); return; }
     await upd(d=>{
       const newBets = {...d.bets, [m.id]:{...(d.bets[m.id]||{}), [user]:{side, amount}}};
       const newPts  = {...d.betPoints, [user]:(d.betPoints[user]!==undefined?d.betPoints[user]:START_POINTS) - amount};
@@ -1230,7 +1236,7 @@ function PollsTab({data, upd, allPlayers, firebaseUser}) {
               <div key={m.id} style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:"16px",marginBottom:12}}>
                 <div style={{fontSize:12,color:"#64748b",marginBottom:10}}>{m.date}{m.time?` · ${m.time}`:""}{m.venue?` · 📍${m.venue}`:""}</div>
                 {(()=>{
-                  const voted = hasDeviceVoted("poll_"+m.id);
+                  const voted = hasVoted("poll_"+m.id);
                   return(
                     <div>
                       {voted&&<div style={{fontSize:11,color:"#10b981",marginBottom:8,textAlign:"center"}}>✓ You voted on this device</div>}
