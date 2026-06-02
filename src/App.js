@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth, LoginPage, PendingApproval, AdminPanel, signOut, auth } from "./Auth";
 
 const FB_URL = "https://tristate-tennis-default-rtdb.firebaseio.com/state.json";
@@ -1417,6 +1417,42 @@ function PollsTab({data, upd, allPlayers, firebaseUser}) {
 }
 
 
+
+// ─── Completed Match Stats Viewer ────────────────────────────────────────────
+function CompletedMatchStats({m, onClose}) {
+  const [tab, setTab] = useState("points");
+  const live = m.matchStats;
+  if (!live) return null;
+  return (
+    <div style={{position:"fixed",inset:0,background:"#07090f",zIndex:1000,display:"flex",flexDirection:"column",fontFamily:"system-ui,sans-serif"}}>
+      <div style={{background:"#0a1020",borderBottom:"1px solid #1e293b",padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+        <div>
+          <div style={{fontWeight:700,color:"#fff",fontSize:15}}>{m.a} vs {m.b}</div>
+          <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{m.date}{m.time?` · ${m.time}`:""} · {m.sa} / {m.sb}</div>
+        </div>
+        <button onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:20,cursor:"pointer"}}>×</button>
+      </div>
+      <div style={{display:"flex",gap:0,background:"#111827",borderBottom:"1px solid #1e293b",flexShrink:0}}>
+        {[["points","📋 Points"],["momentum","📈 Momentum"],["stats","📊 Stats"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{
+            flex:1,padding:"12px 4px",border:"none",cursor:"pointer",fontSize:13,
+            fontWeight:tab===id?700:400,background:"transparent",
+            color:tab===id?"#93c5fd":"#64748b",
+            borderBottom:tab===id?"2px solid #3b82f6":"2px solid transparent",
+          }}>{label}</button>
+        ))}
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
+        <div style={{maxWidth:500,margin:"0 auto"}}>
+          {tab==="points"&&<PointsHistory live={live} nameA={m.a} nameB={m.b}/>}
+          {tab==="momentum"&&<MomentumChart live={live} nameA={m.a} nameB={m.b}/>}
+          {tab==="stats"&&<MatchMetrics live={live} nameA={m.a} nameB={m.b}/>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const { user: firebaseUser, approved, checking } = useAuth();
@@ -1494,11 +1530,21 @@ export default function App() {
     return ()=>clearInterval(t);
   },[liveMatch,load]);
 
+  // Debounced save — UI updates instantly, Firebase saves after 800ms of inactivity
+  const saveTimer = useRef(null);
+  const pendingSave = useRef(null);
+
   function upd(fn) {
     const nd=fn(data);
     setData(nd);
     setStatus("saving");
-    dbSave(nd).then(()=>setStatus("ok")).catch(()=>setStatus("error"));
+    pendingSave.current = nd;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(()=>{
+      dbSave(pendingSave.current)
+        .then(()=>setStatus("ok"))
+        .catch(()=>setStatus("error"));
+    }, 800);
     return nd;
   }
 
@@ -1538,10 +1584,18 @@ export default function App() {
     const m = getCurrentLiveMatch(); if(!m) return;
     const live = addPoint(m.live||newLive(), side);
     const type = liveMatch.type;
-    upd(d=>{
+    // Update UI instantly
+    const nd = (d=>{
       const key=type==="doubles"?"dMatches":"sMatches";
       return {...d,[key]:d[key].map(x=>x.id===m.id?{...x,live}:x)};
-    });
+    })(data);
+    setData(nd);
+    // Save to Firebase in background — debounced to reduce calls during rapid play
+    pendingSave.current = nd;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(()=>{
+      dbSave(pendingSave.current).catch(()=>{});
+    }, 1500); // longer debounce for live scoring
   }
 
   function handleUndo() {
