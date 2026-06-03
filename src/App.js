@@ -338,7 +338,12 @@ function buildGameHistory(live, nameA, nameB) {
 function PointsHistory({live, nameA, nameB}) {
   const PTS = [0,15,30,40,"AD"];
   const games = buildGameHistory(live, nameA, nameB);
-  const [expanded, setExpanded] = useState(0); // which game is expanded
+  const [expanded, setExpanded] = useState(0);
+
+  function isTiebreakGame(g) {
+    const parts = g.setScore.split("-").map(Number);
+    return (parts[0]===7&&parts[1]===6)||(parts[0]===6&&parts[1]===7);
+  }
 
   if (games.length===0) return (
     <div style={{textAlign:"center",color:"#64748b",padding:"40px 0",fontSize:13}}>No completed games yet</div>
@@ -349,49 +354,71 @@ function PointsHistory({live, nameA, nameB}) {
       {games.map((g,i)=>{
         const winnerName = g.winner==="a"?nameA:nameB;
         const isOpen = expanded===i;
+        const tbGame = isTiebreakGame(g);
         return (
-          <div key={i} style={{marginBottom:8,border:"1px solid #1e293b",borderRadius:10,overflow:"hidden"}}>
-            {/* Game header */}
+          <div key={i} style={{marginBottom:8,border:`1px solid ${tbGame?"#7c3aed44":"#1e293b"}`,borderRadius:10,overflow:"hidden"}}>
             <div onClick={()=>setExpanded(isOpen?-1:i)}
-              style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-                padding:"10px 14px",background:isOpen?"#1e293b":"#111827",cursor:"pointer"}}>
+              style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:isOpen?"#1e293b":"#111827",cursor:"pointer"}}>
               <div>
+                {tbGame&&<span style={{marginRight:6,fontSize:10,background:"#7c3aed33",color:"#a78bfa",padding:"2px 6px",borderRadius:4,fontWeight:700}}>TIEBREAK</span>}
                 <span style={{fontSize:12,color:"#64748b"}}>Score: ({g.setScore}) </span>
                 <span style={{fontSize:12,fontWeight:700,color:"#e2e8f0"}}>Won by {winnerName}</span>
-                {g.isBreak&&<span style={{marginLeft:8,fontSize:10,background:"#7c3aed33",color:"#a78bfa",padding:"2px 6px",borderRadius:4,fontWeight:700}}>BREAK</span>}
+                {g.isBreak&&!tbGame&&<span style={{marginLeft:8,fontSize:10,background:"#7c3aed33",color:"#a78bfa",padding:"2px 6px",borderRadius:4,fontWeight:700}}>BREAK</span>}
               </div>
               <span style={{color:"#64748b",fontSize:12}}>{isOpen?"▲":"▼"}</span>
             </div>
-            {/* Point detail */}
             {isOpen&&(
               <div style={{padding:"12px 14px",background:"#0e1320"}}>
-                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"6px 12px",alignItems:"center"}}>
-                  <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>{nameA.split("/")[0]}</div>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {g.points.map((p,j)=>{
-                      const pts = p.deuce?"40":PTS[p.pA]?.toString()||"0";
-                      const isCurrent = p.who==="a";
-                      return <span key={j} style={{fontSize:12,fontWeight:isCurrent?700:400,color:isCurrent?"#34d399":"#64748b",minWidth:24,textAlign:"center"}}>{pts}</span>;
-                    })}
-                    <span style={{fontSize:12,fontWeight:700,color:g.winner==="a"?"#34d399":"#64748b"}}>
-                      {g.winner==="a"?"✓":""}
-                    </span>
+                {tbGame ? (
+                  <div>
+                    <div style={{fontSize:11,color:"#a78bfa",marginBottom:8,fontWeight:600}}>🎾 Tiebreak Points</div>
+                    <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"6px 12px",alignItems:"center"}}>
+                      <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>{nameA.split("/")[0]}</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {g.points.map((p,j)=>{
+                          const isCurrent=p.who==="a";
+                          return <span key={j} style={{fontSize:13,fontWeight:isCurrent?700:400,color:isCurrent?"#34d399":"#64748b",minWidth:20,textAlign:"center"}}>{p.pA}</span>;
+                        })}
+                        <span style={{fontSize:13,fontWeight:700,color:g.winner==="a"?"#34d399":"transparent"}}>✓</span>
+                      </div>
+                      <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>{nameB.split("/")[0]}</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {g.points.map((p,j)=>{
+                          const isCurrent=p.who==="b";
+                          return <span key={j} style={{fontSize:13,fontWeight:isCurrent?700:400,color:isCurrent?"#34d399":"#64748b",minWidth:20,textAlign:"center"}}>{p.pB}</span>;
+                        })}
+                        <span style={{fontSize:13,fontWeight:700,color:g.winner==="b"?"#34d399":"transparent"}}>✓</span>
+                      </div>
+                    </div>
+                    <div style={{marginTop:8,fontSize:10,color:"#475569"}}>{g.points.length} points played</div>
                   </div>
-                  <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>{nameB.split("/")[0]}</div>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {g.points.map((p,j)=>{
-                      const pts = p.deuce?"40":PTS[p.pB]?.toString()||"0";
-                      const isCurrent = p.who==="b";
-                      return <span key={j} style={{fontSize:12,fontWeight:isCurrent?700:400,color:isCurrent?"#34d399":"#64748b",minWidth:24,textAlign:"center"}}>{pts}</span>;
-                    })}
-                    <span style={{fontSize:12,fontWeight:700,color:g.winner==="b"?"#34d399":"#64748b"}}>
-                      {g.winner==="b"?"✓":""}
-                    </span>
+                ) : (
+                  <div>
+                    <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"6px 12px",alignItems:"center"}}>
+                      <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>{nameA.split("/")[0]}</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {g.points.map((p,j)=>{
+                          const pts=p.deuce?"40":PTS[p.pA]?.toString()||"0";
+                          const isCurrent=p.who==="a";
+                          return <span key={j} style={{fontSize:12,fontWeight:isCurrent?700:400,color:isCurrent?"#34d399":"#64748b",minWidth:24,textAlign:"center"}}>{pts}</span>;
+                        })}
+                        <span style={{fontSize:12,fontWeight:700,color:g.winner==="a"?"#34d399":"transparent"}}>✓</span>
+                      </div>
+                      <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>{nameB.split("/")[0]}</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {g.points.map((p,j)=>{
+                          const pts=p.deuce?"40":PTS[p.pB]?.toString()||"0";
+                          const isCurrent=p.who==="b";
+                          return <span key={j} style={{fontSize:12,fontWeight:isCurrent?700:400,color:isCurrent?"#34d399":"#64748b",minWidth:24,textAlign:"center"}}>{pts}</span>;
+                        })}
+                        <span style={{fontSize:12,fontWeight:700,color:g.winner==="b"?"#34d399":"transparent"}}>✓</span>
+                      </div>
+                    </div>
+                    <div style={{marginTop:8,fontSize:10,color:"#475569"}}>
+                      {g.server==="a"?nameA:nameB} serving · {g.points.length} points played
+                    </div>
                   </div>
-                </div>
-                <div style={{marginTop:8,fontSize:10,color:"#475569"}}>
-                  {g.server==="a"?nameA:nameB} serving · {g.points.length} points played
-                </div>
+                )}
               </div>
             )}
           </div>
@@ -400,7 +427,6 @@ function PointsHistory({live, nameA, nameB}) {
     </div>
   );
 }
-
 function MomentumChart({live, nameA, nameB}) {
   const pointLog = live.pointLog||[];
   if (pointLog.length<2) return (
