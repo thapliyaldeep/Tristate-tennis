@@ -2297,65 +2297,9 @@ export default function App() {
         )}
 
         {/* MANAGE */}
-        {tab==="manage"&&(
-          <div>
-            <div style={{fontWeight:700,color:"#fff",fontSize:16,marginBottom:20}}>Manage Teams & Players</div>
-            <div style={{marginBottom:32}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                <div style={{fontWeight:700,color:"#93c5fd",fontSize:14}}>👥 Doubles Teams ({data.doubles.length})</div>
-                <button style={pbtn} onClick={()=>{setLg("doubles");setModal("addteam");setMf({teamName:""});}}>+ Add Team</button>
-              </div>
-              <div style={{border:"1px solid #1e293b",borderRadius:8,overflow:"hidden"}}>
-                {data.doubles.map((name,i)=>{
-                  const isWD = (data.withdrawn||[]).includes(name);
-                  return (
-                    <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:isWD?"#1a0a0a":i%2===0?"#111827":"#0f172a",borderBottom:"1px solid #1e293b"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        {isWD&&<span style={{fontSize:10,background:"#7f1d1d",color:"#fca5a5",padding:"2px 6px",borderRadius:4,fontWeight:700}}>WD</span>}
-                        <span style={{fontWeight:600,color:isWD?"#64748b":"#cbd5e1",textDecoration:isWD?"line-through":"none"}}>{name}</span>
-                      </div>
-                      <div style={{display:"flex",gap:6}}>
-                        <button onClick={()=>withdrawTeam(name,isWD)} style={{padding:"4px 10px",background:isWD?"#1e3a5f":"#7f1d1d",border:"none",borderRadius:6,color:isWD?"#93c5fd":"#fca5a5",fontSize:11,cursor:"pointer"}}>
-                          {isWD?"Reinstate":"Withdraw"}
-                        </button>
-                        <button onClick={()=>{setLg("doubles");removeTeam(name);}} style={redbtn}>Remove</button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            <div>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                <div style={{fontWeight:700,color:"#93c5fd",fontSize:14}}>👤 Singles Players ({data.singles.length})</div>
-                <button style={pbtn} onClick={()=>{setLg("singles");setModal("addteam");setMf({teamName:""});}}>+ Add Player</button>
-              </div>
-              <div style={{border:"1px solid #1e293b",borderRadius:8,overflow:"hidden"}}>
-                {data.singles.map((name,i)=>{
-                  const isWD = (data.withdrawn||[]).includes(name);
-                  return (
-                    <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:isWD?"#1a0a0a":i%2===0?"#111827":"#0f172a",borderBottom:"1px solid #1e293b"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        {isWD&&<span style={{fontSize:10,background:"#7f1d1d",color:"#fca5a5",padding:"2px 6px",borderRadius:4,fontWeight:700}}>WD</span>}
-                        <span style={{fontWeight:600,color:isWD?"#64748b":"#cbd5e1",textDecoration:isWD?"line-through":"none"}}>{name}</span>
-                      </div>
-                      <div style={{display:"flex",gap:6}}>
-                        <button onClick={()=>withdrawTeam(name,isWD)} style={{padding:"4px 10px",background:isWD?"#1e3a5f":"#7f1d1d",border:"none",borderRadius:6,color:isWD?"#93c5fd":"#fca5a5",fontSize:11,cursor:"pointer"}}>
-                          {isWD?"Reinstate":"Withdraw"}
-                        </button>
-                        <button onClick={()=>{setLg("singles");removeTeam(name);}} style={redbtn}>Remove</button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+        {tab==="manage"&&isManager&&(
+          <ManageTab data={data} upd={upd} firebaseUser={firebaseUser}/>
         )}
-      </div>
-
-      {/* Admin Panel */}
-      {showAdmin&&<AdminPanel onClose={()=>setShowAdmin(false)}/>}
 
       {/* MODALS */}
       {modal==="match"&&(
