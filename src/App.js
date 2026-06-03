@@ -1562,6 +1562,198 @@ function CompletedMatchStats({m, onClose}) {
   );
 }
 
+
+// ─── Manage Tab (Next Season) ─────────────────────────────────────────────────
+function ManageTab({data, upd, firebaseUser}) {
+  const ADMIN_EMAIL_LOCAL = "deepcolour@gmail.com";
+  const isAdmin = firebaseUser?.email === ADMIN_EMAIL_LOCAL ||
+                  (data.managers||[]).includes(firebaseUser?.email?.toLowerCase());
+  const [section, setSection] = useState("doubles");
+  const [mf, setMf] = useState({});
+
+  const registeredUsers = Object.values(data.users||{});
+  const registeredNames = registeredUsers.map(u=>u.name||u.email?.split("@")[0]||"Unknown");
+
+  const doublesTeams   = data.doubles||[];
+  const singlesPlayers = data.singles||[];
+  const doublesGroups  = data.doublesGroups||{A:[],B:[]};
+  const singlesGroups  = data.singlesGroups||{A:[],B:[]};
+
+  async function addTeam(type, name) {
+    if (!name?.trim()) return;
+    upd(d=>({...d, [type==="doubles"?"doubles":"singles"]: [...(d[type==="doubles"?"doubles":"singles"]||[]), name.trim()]}));
+  }
+  async function removeTeam(type, name) {
+    if (!window.confirm(`Remove "${name}"?`)) return;
+    upd(d=>({...d, [type==="doubles"?"doubles":"singles"]: (d[type==="doubles"?"doubles":"singles"]||[]).filter(t=>t!==name)}));
+  }
+  async function addToGroup(type, group, name) {
+    const key = type==="doubles"?"doublesGroups":"singlesGroups";
+    upd(d=>{
+      const groups = {...(d[key]||{A:[],B:[]})};
+      Object.keys(groups).forEach(g=>{ groups[g]=(groups[g]||[]).filter(n=>n!==name); });
+      groups[group] = [...(groups[group]||[]), name];
+      return {...d, [key]:groups};
+    });
+  }
+  async function removeFromGroup(type, group, name) {
+    const key = type==="doubles"?"doublesGroups":"singlesGroups";
+    upd(d=>{
+      const groups = {...(d[key]||{A:[],B:[]})};
+      groups[group] = (groups[group]||[]).filter(n=>n!==name);
+      return {...d, [key]:groups};
+    });
+  }
+
+  const teams    = section==="doubles" ? doublesTeams   : singlesPlayers;
+  const groups   = section==="doubles" ? doublesGroups  : singlesGroups;
+  const ungrouped = teams.filter(t=>!Object.values(groups).flat().includes(t));
+
+  const secBtn = (id,label) => (
+    <button key={id} onClick={()=>setSection(id)} style={{
+      padding:"7px 18px",border:"none",borderRadius:7,cursor:"pointer",fontSize:13,fontWeight:600,
+      background:section===id?"#3b82f6":"#1e293b",color:section===id?"#fff":"#64748b"
+    }}>{label}</button>
+  );
+
+  return (
+    <div>
+      <div style={{fontWeight:700,color:"#fff",fontSize:16,marginBottom:20}}>Manage Teams & Groups</div>
+      <div style={{display:"flex",gap:8,marginBottom:24}}>
+        {secBtn("doubles","👥 Doubles")}
+        {secBtn("singles","👤 Singles")}
+      </div>
+
+      {/* Add team/player */}
+      {isAdmin&&(
+        <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:10,padding:"16px",marginBottom:20}}>
+          <div style={{fontWeight:700,color:"#fff",marginBottom:10,fontSize:14}}>
+            {section==="doubles"?"Add Doubles Team":"Add Singles Player"}
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <input value={mf.newName||""} onChange={e=>setMf(f=>({...f,newName:e.target.value}))}
+              placeholder={section==="doubles"?"e.g. Rahul/Vikram":"e.g. Rahul"}
+              style={{flex:1,padding:"9px 12px",background:"#0f172a",border:"1px solid #334155",borderRadius:8,color:"#e2e8f0",fontSize:13,outline:"none"}}
+              onKeyDown={e=>{if(e.key==="Enter"&&mf.newName?.trim()){addTeam(section,mf.newName);setMf(f=>({...f,newName:""}));}}}
+            />
+            <button onClick={()=>{addTeam(section,mf.newName);setMf(f=>({...f,newName:""}));}}
+              disabled={!mf.newName?.trim()}
+              style={{padding:"9px 16px",background:"#3b82f6",border:"none",borderRadius:8,color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",opacity:mf.newName?.trim()?1:.4}}>
+              Add
+            </button>
+          </div>
+          {section==="doubles"&&(
+            <div style={{fontSize:11,color:"#64748b",marginTop:10}}>
+              💡 Form team from registered players:
+              <div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap"}}>
+                <select value={mf.p1||""} onChange={e=>setMf(f=>({...f,p1:e.target.value}))}
+                  style={{padding:"6px 8px",background:"#0f172a",border:"1px solid #334155",borderRadius:6,color:"#e2e8f0",fontSize:12,outline:"none"}}>
+                  <option value="">Player 1…</option>
+                  {registeredNames.map(n=><option key={n} value={n}>{n}</option>)}
+                </select>
+                <select value={mf.p2||""} onChange={e=>setMf(f=>({...f,p2:e.target.value}))}
+                  style={{padding:"6px 8px",background:"#0f172a",border:"1px solid #334155",borderRadius:6,color:"#e2e8f0",fontSize:12,outline:"none"}}>
+                  <option value="">Player 2…</option>
+                  {registeredNames.filter(n=>n!==mf.p1).map(n=><option key={n} value={n}>{n}</option>)}
+                </select>
+                <button onClick={()=>{
+                  if(mf.p1&&mf.p2){addTeam("doubles",`${mf.p1}/${mf.p2}`);setMf(f=>({...f,p1:"",p2:""}));}
+                }} disabled={!mf.p1||!mf.p2}
+                  style={{padding:"6px 12px",background:"#3b82f6",border:"none",borderRadius:6,color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer",opacity:mf.p1&&mf.p2?1:.4}}>
+                  Form Team
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Groups */}
+      {["A","B"].map(grp=>(
+        <div key={grp} style={{marginBottom:20}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{background:"#1e3a5f",color:"#93c5fd",fontWeight:800,fontSize:13,padding:"4px 12px",borderRadius:6}}>GROUP {grp}</div>
+              <span style={{fontSize:12,color:"#64748b"}}>{(groups[grp]||[]).length} {section==="doubles"?"teams":"players"}</span>
+            </div>
+            {isAdmin&&ungrouped.length>0&&(
+              <select onChange={e=>{if(e.target.value){addToGroup(section,grp,e.target.value);e.target.value="";}}}
+                style={{padding:"6px 10px",background:"#0f172a",border:"1px solid #334155",borderRadius:6,color:"#e2e8f0",fontSize:12,outline:"none"}}>
+                <option value="">+ Add to Group {grp}…</option>
+                {ungrouped.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+            )}
+          </div>
+          <div style={{border:"1px solid #1e293b",borderRadius:8,overflow:"hidden"}}>
+            {(groups[grp]||[]).length===0
+              ?<div style={{padding:"16px",color:"#64748b",fontSize:13,textAlign:"center"}}>No {section==="doubles"?"teams":"players"} yet</div>
+              :(groups[grp]||[]).map((name,i)=>(
+                <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",background:i%2===0?"#111827":"#0f172a",borderBottom:"1px solid #1e293b"}}>
+                  <span style={{fontWeight:600,color:"#cbd5e1",fontSize:13}}>{name}</span>
+                  {isAdmin&&(
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={()=>addToGroup(section,grp==="A"?"B":"A",name)}
+                        style={{padding:"4px 8px",background:"#1e3a5f",border:"none",borderRadius:5,color:"#93c5fd",fontSize:11,cursor:"pointer"}}>
+                        → Group {grp==="A"?"B":"A"}
+                      </button>
+                      <button onClick={()=>removeFromGroup(section,grp,name)}
+                        style={{padding:"4px 8px",background:"#2d1515",border:"none",borderRadius:5,color:"#f87171",fontSize:11,cursor:"pointer"}}>
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))
+            }
+          </div>
+        </div>
+      ))}
+
+      {/* Ungrouped */}
+      {ungrouped.length>0&&(
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:11,color:"#64748b",marginBottom:10,textTransform:"uppercase",letterSpacing:.5}}>Ungrouped ({ungrouped.length})</div>
+          <div style={{border:"1px solid #334155",borderRadius:8,overflow:"hidden"}}>
+            {ungrouped.map((name,i)=>(
+              <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",background:i%2===0?"#111827":"#0f172a",borderBottom:"1px solid #1e293b"}}>
+                <span style={{fontWeight:600,color:"#64748b",fontSize:13}}>{name}</span>
+                {isAdmin&&(
+                  <div style={{display:"flex",gap:6}}>
+                    {["A","B"].map(g=>(
+                      <button key={g} onClick={()=>addToGroup(section,g,name)}
+                        style={{padding:"4px 8px",background:"#1e3a5f",border:"none",borderRadius:5,color:"#93c5fd",fontSize:11,cursor:"pointer"}}>
+                        → Group {g}
+                      </button>
+                    ))}
+                    <button onClick={()=>removeTeam(section,name)}
+                      style={{padding:"4px 8px",background:"#2d1515",border:"none",borderRadius:5,color:"#f87171",fontSize:11,cursor:"pointer"}}>
+                      Remove
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Registered users reference */}
+      {isAdmin&&registeredUsers.length>0&&(
+        <div style={{marginTop:8,padding:"12px 14px",background:"#0a1020",borderRadius:8,border:"1px solid #1e293b"}}>
+          <div style={{fontSize:11,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>Registered Users ({registeredUsers.length})</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {registeredUsers.map(u=>(
+              <div key={u.email} style={{background:"#111827",border:"1px solid #1e293b",borderRadius:6,padding:"4px 10px",fontSize:12,color:"#94a3b8"}}>
+                {u.name||u.email?.split("@")[0]}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const { user: firebaseUser, approved, checking } = useAuth();
@@ -1602,6 +1794,8 @@ export default function App() {
           users:     r.users     || {},
           withdrawn: r.withdrawn || [],
           managers:  r.managers  || [ADMIN_EMAIL],
+          doublesGroups: r.doublesGroups || {A:[],B:[]},
+          singlesGroups: r.singlesGroups || {A:[],B:[]},
         };
         // If keeper is actively scoring, preserve local live state
         // to prevent Firebase stale data from overwriting in-flight points
@@ -1694,7 +1888,7 @@ export default function App() {
   const teams   = isD?data.doubles :data.singles;
   const avail   = isD?data.dAvail  :data.sAvail;
   const matches = isD?data.dMatches:data.sMatches;
-  const groups  = isD?GROUPS.doubles:GROUPS.singles;
+  const groups  = isD?(data.doublesGroups||{A:[],B:[]}):(data.singlesGroups||{A:[],B:[]});
   const standA  = calcGroupStandings(matches,groups.A);
   const standB  = calcGroupStandings(matches,groups.B);
   const pending = matches.filter(m=>!m.done);
