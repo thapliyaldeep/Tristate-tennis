@@ -85,11 +85,12 @@ function newLive(serving="a") {
     deuce: false,
     adv: null,
     serving,
-    history: [],        // stack of previous states for undo
+    initialServer: serving, // store who served first — needed for BREAK detection
+    history: [],
     startTs: Date.now(),
-    setTs: [Date.now()],   // timestamp when each set started
-    gameTs: [Date.now()],  // timestamp when each game started
-    pointLog: [],          // [{who, ts, gameIdx, setIdx}]
+    setTs: [Date.now()],
+    gameTs: [Date.now()],
+    pointLog: [],
     totalGames: 0,
   };
 }
@@ -290,7 +291,7 @@ function buildGameHistory(live, nameA, nameB) {
   const games = [];
   let gamesA=0, gamesB=0;
   let pA=0, pB=0, deuce=false, adv=null;
-  let server = live.serving||"a";
+  let server = live.initialServer || live.serving || "a";
   let currentGame = { points:[], setScore:"0-0", server };
   let inTiebreak = false;
   let tbPointsA=0, tbPointsB=0;
