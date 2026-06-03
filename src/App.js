@@ -1570,29 +1570,46 @@ export default function App() {
   const FUTURE      = futureDates();
   const defaultDate = FUTURE[0]||ALL_DATES[0];
 
+  const liveMatchRef = useRef(null); // track current live match id
+
   const load = useCallback(async (init=false) => {
     try {
       const r = await dbLoad();
       if (r) {
-        // Sanitize — Firebase can return objects instead of arrays
         const toArr = v => !v ? [] : Array.isArray(v) ? v : Object.values(v);
         const safe = {
           ...DEFAULT,
           ...r,
-          doubles:  toArr(r.doubles),
-          singles:  toArr(r.singles),
-          dMatches: toArr(r.dMatches),
-          sMatches: toArr(r.sMatches),
-          banter:   toArr(r.banter),
-          polls:    r.polls    || {},
-          tournPoll:r.tournPoll|| {doubles:{},singles:{}},
-          bets:     r.bets     || {},
-          betPoints:r.betPoints|| {},
-          users:    r.users    || {},
+          doubles:   toArr(r.doubles),
+          singles:   toArr(r.singles),
+          dMatches:  toArr(r.dMatches),
+          sMatches:  toArr(r.sMatches),
+          banter:    toArr(r.banter),
+          polls:     r.polls     || {},
+          tournPoll: r.tournPoll || {doubles:{},singles:{}},
+          bets:      r.bets      || {},
+          betPoints: r.betPoints || {},
+          users:     r.users     || {},
           withdrawn: r.withdrawn || [],
           managers:  r.managers  || [ADMIN_EMAIL],
         };
-        setData(safe);
+        // If keeper is actively scoring, preserve local live state
+        // to prevent Firebase stale data from overwriting in-flight points
+        setData(prev => {
+          if (!prev || !liveMatchRef.current) return safe;
+          const {matchId, type, isKeeper} = liveMatchRef.current;
+          if (!isKeeper) return safe; // viewers always use Firebase data
+          // Keeper: keep local live state, update everything else
+          const key = type==="doubles"?"dMatches":"sMatches";
+          const localMatch = prev[key]?.find(m=>m.id===matchId);
+          if (!localMatch?.live) return safe;
+          return {
+            ...safe,
+            [key]: safe[key].map(m =>
+              m.id===matchId ? {...m, live: localMatch.live} : m
+            )
+          };
+        });
         if(init) setStatus("ok");
       } else if (init) {
         await dbSave(DEFAULT);
@@ -1624,11 +1641,12 @@ export default function App() {
     });
   },[load]);
 
-  // Poll every 5s when watching live — but NOT if we are the keeper
-  // Keeper's local state is authoritative; polling would overwrite uncommitted points
+  // Keep liveMatchRef in sync
+  useEffect(()=>{ liveMatchRef.current = liveMatch; },[liveMatch]);
+
+  // Poll every 5s for viewers only
   useEffect(()=>{
-    if (!liveMatch) return;
-    if (liveMatch.isKeeper) return; // keeper doesn't poll — they ARE the source of truth
+    if (!liveMatch || liveMatch.isKeeper) return;
     const t = setInterval(()=>load(false), 5000);
     return ()=>clearInterval(t);
   },[liveMatch,load]);
