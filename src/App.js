@@ -353,7 +353,7 @@ function buildGameHistory(live, nameA, nameB) {
   return games.reverse(); // newest first
 }
 
-function PointsHistory({live, nameA, nameB}) {
+function PointsHistory({live, nameA, nameB, hideBadges=false}) {
   const PTS = [0,15,30,40,"AD"];
   const games = buildGameHistory(live, nameA, nameB);
   const [expanded, setExpanded] = useState(0);
@@ -381,7 +381,7 @@ function PointsHistory({live, nameA, nameB}) {
                 {tbGame&&<span style={{marginRight:6,fontSize:10,background:"#7c3aed33",color:"#a78bfa",padding:"2px 6px",borderRadius:4,fontWeight:700}}>TIEBREAK</span>}
                 <span style={{fontSize:12,color:"#64748b"}}>Score: ({g.setScore}) </span>
                 <span style={{fontSize:12,fontWeight:700,color:"#e2e8f0"}}>Won by {winnerName}</span>
-                {g.isBreak&&!tbGame&&<span style={{marginLeft:8,fontSize:10,background:"#7c3aed33",color:"#a78bfa",padding:"2px 6px",borderRadius:4,fontWeight:700}}>BREAK</span>}
+                {g.isBreak&&!tbGame&&!hideBadges&&<span style={{marginLeft:8,fontSize:10,background:"#7c3aed33",color:"#a78bfa",padding:"2px 6px",borderRadius:4,fontWeight:700}}>BREAK</span>}
               </div>
               <span style={{color:"#64748b",fontSize:12}}>{isOpen?"▲":"▼"}</span>
             </div>
@@ -851,7 +851,7 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
         )}
 
         {/* Tab panels */}
-        {activeTab==="points"&&<PointsHistory live={live} nameA={nameA} nameB={nameB}/>}
+        {activeTab==="points"&&<PointsHistory live={live} nameA={nameA} nameB={nameB} hideBadges={live.isTiebreak}/>}
         {activeTab==="momentum"&&<MomentumChart live={live} nameA={nameA} nameB={nameB}/>}
         {activeTab==="stats"&&<MatchMetrics live={live} nameA={nameA} nameB={nameB}/>}
       </div>
