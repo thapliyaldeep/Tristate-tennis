@@ -175,14 +175,16 @@ function winGame(live, who) {
   l.gameTs = [...(l.gameTs||[]), now];
 
   const gw = l.games[who], go = l.games[opp];
-  // Set won: lead by 2 from 6+ games, but at 6-6 go to tiebreak (won by reaching 7)
-  // Check if we just reached 6-6 — next point entry is tiebreak
-  if (l.games.a===6 && l.games.b===6) {
+  const currentSet = l.sets.length; // 0=set1, 1=set2, 2=set3
+  const isDecider  = currentSet >= 2; // set 3 onwards — no tiebreak
+
+  // At 6-6: tiebreak in sets 1&2, but keep playing in decider set
+  if (l.games.a===6 && l.games.b===6 && !isDecider) {
     l.isTiebreak = true;
-    l.points = {a:0,b:0}; // reset points for tiebreak counting
+    l.points = {a:0,b:0};
     return l;
   }
-  // Normal set win: 6+ games with 2-game lead
+  // Normal set win: 6+ games with 2-game lead (always applies in decider)
   const setWon = gw>=6 && gw-go>=2;
   if (setWon) {
     l.sets.push({a:l.games.a, b:l.games.b, endTs:now});
