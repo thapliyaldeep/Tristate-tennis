@@ -1587,9 +1587,11 @@ export default function App() {
     });
   },[load]);
 
-  // Poll every 5s when watching live
+  // Poll every 5s when watching live — but NOT if we are the keeper
+  // Keeper's local state is authoritative; polling would overwrite uncommitted points
   useEffect(()=>{
     if (!liveMatch) return;
+    if (liveMatch.isKeeper) return; // keeper doesn't poll — they ARE the source of truth
     const t = setInterval(()=>load(false), 5000);
     return ()=>clearInterval(t);
   },[liveMatch,load]);
