@@ -1794,6 +1794,7 @@ export default function App() {
           users:     r.users     || {},
           withdrawn: r.withdrawn || [],
           managers:  r.managers  || [ADMIN_EMAIL],
+          users:     r.users     || {},
           doublesGroups: r.doublesGroups || {A:[],B:[]},
           singlesGroups: r.singlesGroups || {A:[],B:[]},
         };
