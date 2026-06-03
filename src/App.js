@@ -288,48 +288,57 @@ function buildGameHistory(live, nameA, nameB) {
   const PTS_LABEL = [0,15,30,40];
   const pointLog = live.pointLog || [];
   const games = [];
-  let currentGame = { points:[], setScore:"0-0", gameScore:"0-0", server:live.serving||"a" };
-  let gamesA=0, gamesB=0, setsA=0, setsB=0;
+  let gamesA=0, gamesB=0;
   let pA=0, pB=0, deuce=false, adv=null;
   let server = live.serving||"a";
+  let currentGame = { points:[], setScore:"0-0", server };
+  let inTiebreak = false;
+  let tbPointsA=0, tbPointsB=0;
+  let tbGame = { points:[], setScore:"0-0", server };
 
   for (const pt of pointLog) {
     const who = pt.who;
     const opp = who==="a"?"b":"a";
-    // Skip tiebreak points — they're handled separately
+
     if (pt.tb) {
-      currentGame.points.push({who, pA, pB, deuce, adv, tb:true});
-      if (who==="a") pA++; else pB++;
-      // Check tiebreak win (7+ with 2-point lead)
-      const pw=who==="a"?pA:pB, po=who==="a"?pB:pA;
+      // Tiebreak point
+      if (!inTiebreak) {
+        inTiebreak = true;
+        tbPointsA=0; tbPointsB=0;
+        tbGame = { points:[], setScore:`${gamesA}-${gamesB}`, server };
+      }
+      tbGame.points.push({who, pA:tbPointsA, pB:tbPointsB, tb:true});
+      if (who==="a") tbPointsA++; else tbPointsB++;
+      const pw=who==="a"?tbPointsA:tbPointsB, po=who==="a"?tbPointsB:tbPointsA;
       if (pw>=7 && pw-po>=2) {
-        const isBreak=server!==who;
-        games.push({...currentGame,winner:who,isBreak,setScore:`${who==="a"?7:6}-${who==="a"?6:7}`,server,isTiebreak:true});
-        pA=0;pB=0;gamesA=0;gamesB=0;
+        // Tiebreak won
+        const winGames = who==="a" ? {a:7,b:6} : {a:6,b:7};
+        games.push({...tbGame, winner:who, isBreak:false, isTiebreak:true,
+          setScore:`${winGames.a}-${winGames.b}`});
+        gamesA=0; gamesB=0; inTiebreak=false;
         server=server==="a"?"b":"a";
-        currentGame={points:[],setScore:`${gamesA}-${gamesB}`,gameScore:"0-0",server};
+        currentGame={points:[],setScore:`${gamesA}-${gamesB}`,server};
       }
       continue;
     }
+
+    // Normal point
+    inTiebreak = false;
     currentGame.points.push({who, pA, pB, deuce, adv});
 
-    // Advance score
     if (deuce) {
       if (adv===who) {
-        // game won
+        // Game won
         if (who==="a") gamesA++; else gamesB++;
         const isBreak = server!==who;
         games.push({...currentGame, winner:who, isBreak,
           setScore:`${gamesA}-${gamesB}`, server});
         pA=0;pB=0;deuce=false;adv=null;
-        server = server==="a"?"b":"a";
-        // check set
+        server=server==="a"?"b":"a";
+        // Check set
         const gw=who==="a"?gamesA:gamesB, go=who==="a"?gamesB:gamesA;
-        if ((gw>=6&&gw-go>=2)||gw===7) {
-          if(who==="a")setsA++;else setsB++;
-          gamesA=0;gamesB=0;
-        }
-        currentGame={points:[],setScore:`${gamesA}-${gamesB}`,gameScore:"0-0",server};
+        if ((gw>=6&&gw-go>=2)||gw===7) { gamesA=0;gamesB=0; }
+        currentGame={points:[],setScore:`${gamesA}-${gamesB}`,server};
       } else if (adv===opp) { adv=null; }
       else { adv=who; }
     } else {
@@ -344,18 +353,16 @@ function buildGameHistory(live, nameA, nameB) {
         pA=0;pB=0;deuce=false;adv=null;
         server=server==="a"?"b":"a";
         const gw=w==="a"?gamesA:gamesB,go=w==="a"?gamesB:gamesA;
-        if((gw>=6&&gw-go>=2)||gw===7){
-          if(w==="a")setsA++;else setsB++;
-          gamesA=0;gamesB=0;
-        }
-        currentGame={points:[],setScore:`${gamesA}-${gamesB}`,gameScore:"0-0",server};
+        if((gw>=6&&gw-go>=2)||gw===7){gamesA=0;gamesB=0;}
+        currentGame={points:[],setScore:`${gamesA}-${gamesB}`,server};
       }
     }
   }
-  return games.reverse(); // newest first
+  return games.reverse();
 }
 
-function PointsHistory({live, nameA, nameB, hideBadges=false}) {
+
+function PointsHistory({live, nameA, nameB}) {
   const PTS = [0,15,30,40,"AD"];
   const games = buildGameHistory(live, nameA, nameB);
   const [expanded, setExpanded] = useState(0);
@@ -383,7 +390,7 @@ function PointsHistory({live, nameA, nameB, hideBadges=false}) {
                 {tbGame&&<span style={{marginRight:6,fontSize:10,background:"#7c3aed33",color:"#a78bfa",padding:"2px 6px",borderRadius:4,fontWeight:700}}>TIEBREAK</span>}
                 <span style={{fontSize:12,color:"#64748b"}}>Score: ({g.setScore}) </span>
                 <span style={{fontSize:12,fontWeight:700,color:"#e2e8f0"}}>Won by {winnerName}</span>
-                {g.isBreak&&!tbGame&&!hideBadges&&<span style={{marginLeft:8,fontSize:10,background:"#7c3aed33",color:"#a78bfa",padding:"2px 6px",borderRadius:4,fontWeight:700}}>BREAK</span>}
+                {g.isBreak&&!tbGame&&<span style={{marginLeft:8,fontSize:10,background:"#7c3aed33",color:"#a78bfa",padding:"2px 6px",borderRadius:4,fontWeight:700}}>BREAK</span>}
               </div>
               <span style={{color:"#64748b",fontSize:12}}>{isOpen?"▲":"▼"}</span>
             </div>
@@ -853,7 +860,7 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
         )}
 
         {/* Tab panels */}
-        {activeTab==="points"&&<PointsHistory live={live} nameA={nameA} nameB={nameB} hideBadges={live.isTiebreak}/>}
+        {activeTab==="points"&&<PointsHistory live={live} nameA={nameA} nameB={nameB}/>}
         {activeTab==="momentum"&&<MomentumChart live={live} nameA={nameA} nameB={nameB}/>}
         {activeTab==="stats"&&<MatchMetrics live={live} nameA={nameA} nameB={nameB}/>}
       </div>
