@@ -173,17 +173,19 @@ function winGame(live, who) {
 
   const gw = l.games[who], go = l.games[opp];
   // Set won: lead by 2 from 6+ games, but at 6-6 go to tiebreak (won by reaching 7)
-  const atTiebreak = l.games.a===6 && l.games.b===6;
-  const setWon = atTiebreak
-    ? (gw===7) // tiebreak: first to 7 wins set 7-6
-    : (gw>=6 && gw-go>=2);
+  // Check if we just reached 6-6 — next point entry is tiebreak
+  if (l.games.a===6 && l.games.b===6) {
+    l.isTiebreak = true;
+    l.points = {a:0,b:0}; // reset points for tiebreak counting
+    return l;
+  }
+  // Normal set win: 6+ games with 2-game lead
+  const setWon = gw>=6 && gw-go>=2;
   if (setWon) {
-    l.sets.push({a:l.games.a, b:l.games.b, endTs:now, tiebreak: atTiebreak||(l.games.a===7||l.games.b===7)});
+    l.sets.push({a:l.games.a, b:l.games.b, endTs:now});
     l.games = {a:0,b:0};
     l.isTiebreak = false;
     l.setTs = [...(l.setTs||[]), now];
-  } else if (l.games.a===6 && l.games.b===6) {
-    l.isTiebreak = true; // flag that next game is tiebreak
   }
   return l;
 }
