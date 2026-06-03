@@ -104,7 +104,8 @@ function addPoint(live, who) {
   const opp = who==="a"?"b":"a";
   const now = Date.now();
 
-  l.pointLog = [...(l.pointLog||[]), {who, ts:now, set:l.sets.length, game:l.totalGames||0, server:l.serving}];
+  const isTBPoint = !!l.isTiebreak;
+  l.pointLog = [...(l.pointLog||[]), {who, ts:now, set:l.sets.length, game:l.totalGames||0, server:l.serving, tb:isTBPoint}];
 
   // TIEBREAK MODE: points go 1,2,3... first to 7 with 2-point lead
   if (l.isTiebreak) {
@@ -293,6 +294,21 @@ function buildGameHistory(live, nameA, nameB) {
   for (const pt of pointLog) {
     const who = pt.who;
     const opp = who==="a"?"b":"a";
+    // Skip tiebreak points — they're handled separately
+    if (pt.tb) {
+      currentGame.points.push({who, pA, pB, deuce, adv, tb:true});
+      if (who==="a") pA++; else pB++;
+      // Check tiebreak win (7+ with 2-point lead)
+      const pw=who==="a"?pA:pB, po=who==="a"?pB:pA;
+      if (pw>=7 && pw-po>=2) {
+        const isBreak=server!==who;
+        games.push({...currentGame,winner:who,isBreak,setScore:`${who==="a"?7:6}-${who==="a"?6:7}`,server,isTiebreak:true});
+        pA=0;pB=0;gamesA=0;gamesB=0;
+        server=server==="a"?"b":"a";
+        currentGame={points:[],setScore:`${gamesA}-${gamesB}`,gameScore:"0-0",server};
+      }
+      continue;
+    }
     currentGame.points.push({who, pA, pB, deuce, adv});
 
     // Advance score
@@ -356,7 +372,7 @@ function PointsHistory({live, nameA, nameB}) {
       {games.map((g,i)=>{
         const winnerName = g.winner==="a"?nameA:nameB;
         const isOpen = expanded===i;
-        const tbGame = isTiebreakGame(g);
+        const tbGame = isTiebreakGame(g) || !!g.isTiebreak;
         return (
           <div key={i} style={{marginBottom:8,border:`1px solid ${tbGame?"#7c3aed44":"#1e293b"}`,borderRadius:10,overflow:"hidden"}}>
             <div onClick={()=>setExpanded(isOpen?-1:i)}
