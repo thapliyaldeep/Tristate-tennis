@@ -71,7 +71,7 @@ const DEFAULT = {
     "Sanjay/Ravi":   {"5/16":"5pm avail","5/17":"Anytime","5/20":"6pm avail","5/21":"6pm avail"},
   },
   sAvail:   {"Dhar":{"5/15":"5pm+","5/16":"8-10am"},"Viraj":{"5/15":"5pm+"}},
-  dMatches: [], sMatches: [], did:1, sid:1, banter: [], polls: {}, tournPoll: {doubles:{}, singles:{}}, bets: {}, betPoints: {}, withdrawn: [],
+  dMatches: [], sMatches: [], did:1, sid:1, banter: [], polls: {}, tournPoll: {doubles:{}, singles:{}}, bets: {}, betPoints: {}, withdrawn: [], managers: ["deepcolour@gmail.com"],
 };
 
 // ─── Tennis scoring logic ─────────────────────────────────────────────────────
@@ -1590,6 +1590,7 @@ export default function App() {
           betPoints:r.betPoints|| {},
           users:    r.users    || {},
           withdrawn: r.withdrawn || [],
+          managers:  r.managers  || [ADMIN_EMAIL],
         };
         setData(safe);
         if(init) setStatus("ok");
@@ -1659,6 +1660,8 @@ export default function App() {
   if(status==="loading") return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#64748b",fontSize:15}}>🎾 Loading…</div>;
   if(status==="error")   return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#ef4444",fontSize:15,padding:24,textAlign:"center"}}>❌ Could not load data. Check connection and refresh.</div>;
 
+  const managers = data.managers || [ADMIN_EMAIL];
+  const isManager = managers.includes(firebaseUser?.email?.toLowerCase());
   const isD     = lg==="doubles";
   const teams   = isD?data.doubles :data.singles;
   const avail   = isD?data.dAvail  :data.sAvail;

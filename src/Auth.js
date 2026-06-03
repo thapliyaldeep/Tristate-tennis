@@ -315,18 +315,45 @@ function PendingApproval({ user, onSignOut }) {
 
 // ─── Admin Panel ──────────────────────────────────────────────────────────────
 function AdminPanel({ onClose }) {
-  const [emails, setEmails]   = useState({});
-  const [users, setUsers]     = useState({});
+  const [emails, setEmails]     = useState({});
+  const [users, setUsers]       = useState({});
+  const [managers, setManagers] = useState(["deepcolour@gmail.com"]);
   const [newEmail, setNewEmail] = useState("");
-  const [msg, setMsg]         = useState("");
-  const [err, setErr]         = useState("");
-  const [loading, setLoading] = useState(false);
+  const [msg, setMsg]           = useState("");
+  const [err, setErr]           = useState("");
+  const [loading, setLoading]   = useState(false);
 
   useEffect(()=>{
     const unsub1 = onValue(ref(db,"approvedEmails"), snap=>{ setEmails(snap.exists()?snap.val():{}); });
     const unsub2 = onValue(ref(db,"users"), snap=>{ setUsers(snap.exists()?snap.val():{}); });
-    return ()=>{ unsub1(); unsub2(); };
+    const unsub3 = onValue(ref(db,"state"), snap=>{
+      if (snap.exists()) {
+        try {
+          const d = JSON.parse(snap.val());
+          setManagers(d.managers || ["deepcolour@gmail.com"]);
+        } catch {}
+      }
+    });
+    return ()=>{ unsub1(); unsub2(); unsub3(); };
   },[]);
+
+  async function toggleManager(email, isCurrently) {
+    try {
+      // Read current state, update managers list, save back
+      const snap = await get(ref(db,"state"));
+      if (!snap.exists()) return;
+      const d = JSON.parse(snap.val());
+      const current = d.managers || ["deepcolour@gmail.com"];
+      if (isCurrently) {
+        d.managers = current.filter(e=>e!==email);
+      } else {
+        d.managers = [...new Set([...current, email])];
+      }
+      await set(ref(db,"state"), JSON.stringify(d));
+      setManagers(d.managers);
+      setMsg(isCurrently ? `${email} removed as manager` : `${email} is now a manager`);
+    } catch(e) { setErr(e.message); }
+  }
 
   async function add() {
     if (!newEmail.trim()) return;
@@ -387,6 +414,36 @@ function AdminPanel({ onClose }) {
               </div>
             ))
           }
+        </div>
+
+        {/* League Managers */}
+        <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:20,marginBottom:20}}>
+          <div style={{fontWeight:700,color:"#fff",marginBottom:12}}>⚙️ League Managers</div>
+          <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>Managers can access the Manage tab and withdraw players.</div>
+          {registeredUsers.map(u=>{
+            const email = u.email?.toLowerCase();
+            const isCurrentManager = managers.includes(email);
+            const isSuperAdmin = email===ADMIN_EMAIL.toLowerCase();
+            return (
+              <div key={u.email} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #1e293b"}}>
+                {u.photo
+                  ?<img src={u.photo} alt="" style={{width:28,height:28,borderRadius:"50%"}}/>
+                  :<div style={{width:28,height:28,borderRadius:"50%",background:"#1d4ed8",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff"}}>{(u.name||u.email)[0].toUpperCase()}</div>
+                }
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,color:"#e2e8f0",fontWeight:600}}>{u.name||"—"}</div>
+                  <div style={{fontSize:11,color:"#64748b"}}>{u.email}</div>
+                </div>
+                {isSuperAdmin
+                  ? <span style={{fontSize:11,color:"#4ade80",fontWeight:700}}>Super Admin</span>
+                  : <button onClick={()=>toggleManager(email, isCurrentManager)}
+                      style={{padding:"5px 12px",background:isCurrentManager?"#1e3a5f":"#0f172a",border:`1px solid ${isCurrentManager?"#3b82f6":"#334155"}`,borderRadius:6,color:isCurrentManager?"#93c5fd":"#64748b",fontSize:12,cursor:"pointer",fontWeight:isCurrentManager?700:400}}>
+                      {isCurrentManager?"✓ Manager":"Make Manager"}
+                    </button>
+                }
+              </div>
+            );
+          })}
         </div>
 
         {/* Registered users */}
