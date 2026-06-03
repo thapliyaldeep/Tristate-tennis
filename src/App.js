@@ -914,7 +914,7 @@ function MatchCard({m, onScore, onDel, onGoLive, onViewStats}) {
 }
 
 // ─── Group Table ─────────────────────────────────────────────────────────────
-function GroupTable({label,standings}) {
+function GroupTable({label,standings,withdrawn=[]}) {
   return (
     <div style={{marginBottom:24}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
@@ -939,7 +939,7 @@ function GroupTable({label,standings}) {
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       {q&&<span style={{fontSize:10,background:"#064e3b",color:"#10b981",padding:"2px 6px",borderRadius:4,fontWeight:700}}>Q</span>}
                       <span style={{fontWeight:700,color:q?"#34d399":"#cbd5e1"}}>{s.n}</span>
-                      {(data?.withdrawn||[]).includes(s.n)&&<span style={{fontSize:10,background:"#7f1d1d",color:"#fca5a5",padding:"2px 6px",borderRadius:4,fontWeight:700}}>WD</span>}
+                      {withdrawn.includes(s.n)&&<span style={{fontSize:10,background:"#7f1d1d",color:"#fca5a5",padding:"2px 6px",borderRadius:4,fontWeight:700}}>WD</span>}
                     </div>
                   </td>
                   <td style={{padding:"11px 12px",textAlign:"center",color:"#64748b",borderBottom:"1px solid #1e293b"}}>{s.mp}</td>
@@ -2069,8 +2069,8 @@ export default function App() {
           <div>
             <div style={{fontWeight:700,color:"#fff",marginBottom:20,fontSize:16}}>{isD?"Doubles":"Singles"} Points Table</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:24,marginBottom:36}}>
-              <GroupTable label="A" standings={standA}/>
-              <GroupTable label="B" standings={standB}/>
+              <GroupTable label="A" standings={standA} withdrawn={data.withdrawn||[]}/>
+              <GroupTable label="B" standings={standB} withdrawn={data.withdrawn||[]}/>
             </div>
             <div style={{background:"#0a1020",border:"1px solid #1e293b",borderRadius:12,padding:"20px 16px"}}>
               <KnockoutBracket standA={standA} standB={standB}/>
