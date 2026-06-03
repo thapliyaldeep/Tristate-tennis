@@ -96,19 +96,31 @@ function newLive(serving="a") {
 
 // Returns updated live state after a point won by "a" or "b"
 function addPoint(live, who) {
-  // Save snapshot to history before mutating (for undo)
   const snapshot = JSON.parse(JSON.stringify(live));
-  snapshot.history = []; // don't nest history inside history
+  snapshot.history = [];
   let l = JSON.parse(JSON.stringify(live));
   l.history = [...(l.history||[]), snapshot];
-  if (l.history.length > 50) l.history = l.history.slice(-50); // cap at 50
+  if (l.history.length > 50) l.history = l.history.slice(-50);
   const opp = who==="a"?"b":"a";
   const now = Date.now();
 
-  // Log the point (include current server for stats)
   l.pointLog = [...(l.pointLog||[]), {who, ts:now, set:l.sets.length, game:l.totalGames||0, server:l.serving}];
 
-  // Deuce/advantage logic
+  // TIEBREAK MODE: points go 1,2,3... first to 7 with 2-point lead
+  if (l.isTiebreak) {
+    l.points[who]++;
+    const pw = l.points[who], po = l.points[opp];
+    // Switch serve every 2 points in tiebreak (after first point, then every 2)
+    const totalPts = l.points.a + l.points.b;
+    if (totalPts % 2 === 1) l.serving = l.serving==="a"?"b":"a";
+    // Win tiebreak: 7+ points with 2-point lead
+    if (pw >= 7 && pw - po >= 2) {
+      l = winGame(l, who);
+    }
+    return l;
+  }
+
+  // NORMAL SCORING
   if (l.deuce) {
     if (l.adv===who) { l = winGame(l, who); }
     else if (l.adv===opp) { l.adv = null; }
@@ -147,11 +159,18 @@ function winGame(live, who) {
   l.gameTs = [...(l.gameTs||[]), now];
 
   const gw = l.games[who], go = l.games[opp];
-  const setWon = (gw>=6 && gw-go>=2) || gw===7;
+  // Set won: lead by 2 from 6+ games, but at 6-6 go to tiebreak (won by reaching 7)
+  const atTiebreak = l.games.a===6 && l.games.b===6;
+  const setWon = atTiebreak
+    ? (gw===7) // tiebreak: first to 7 wins set 7-6
+    : (gw>=6 && gw-go>=2);
   if (setWon) {
-    l.sets.push({a:l.games.a, b:l.games.b, endTs:now});
+    l.sets.push({a:l.games.a, b:l.games.b, endTs:now, tiebreak: atTiebreak||(l.games.a===7||l.games.b===7)});
     l.games = {a:0,b:0};
+    l.isTiebreak = false;
     l.setTs = [...(l.setTs||[]), now];
+  } else if (l.games.a===6 && l.games.b===6) {
+    l.isTiebreak = true; // flag that next game is tiebreak
   }
   return l;
 }
@@ -178,6 +197,7 @@ function liveToScore(live, nameA, nameB) {
 }
 
 function displayPoints(live, side) {
+  if (live.isTiebreak) return live.points[side].toString(); // show raw count in tiebreak
   if (live.deuce) return live.adv===side ? "Ad" : live.adv ? "" : "40";
   return PTS[live.points[side]].toString();
 }
@@ -679,7 +699,10 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
           </div>
         </div>
 
-        {live.deuce&&!live.adv&&!over&&(
+        {live.isTiebreak&&!over&&(
+          <div style={{background:"#7c3aed33",color:"#a78bfa",fontWeight:700,fontSize:14,padding:"6px 20px",borderRadius:20,letterSpacing:2}}>🎾 TIEBREAK</div>
+        )}
+        {live.deuce&&!live.adv&&!over&&!live.isTiebreak&&(
           <div style={{background:"#1e3a5f",color:"#93c5fd",fontWeight:700,fontSize:14,padding:"6px 20px",borderRadius:20,letterSpacing:2}}>DEUCE</div>
         )}
 
