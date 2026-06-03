@@ -71,7 +71,7 @@ const DEFAULT = {
     "Sanjay/Ravi":   {"5/16":"5pm avail","5/17":"Anytime","5/20":"6pm avail","5/21":"6pm avail"},
   },
   sAvail:   {"Dhar":{"5/15":"5pm+","5/16":"8-10am"},"Viraj":{"5/15":"5pm+"}},
-  dMatches: [], sMatches: [], did:1, sid:1, banter: [], polls: {}, tournPoll: {doubles:{}, singles:{}}, bets: {}, betPoints: {},
+  dMatches: [], sMatches: [], did:1, sid:1, banter: [], polls: {}, tournPoll: {doubles:{}, singles:{}}, bets: {}, betPoints: {}, withdrawn: [],
 };
 
 // ─── Tennis scoring logic ─────────────────────────────────────────────────────
@@ -899,7 +899,7 @@ function MatchCard({m, onScore, onDel, onGoLive, onViewStats}) {
       </div>
       <div style={{textAlign:"right"}}>
         <div style={{fontSize:12,color:"#64748b"}}>{m.date}{m.time?` · ${m.time}`:""}{m.venue?` · 📍${m.venue}`:""}</div>
-        {m.done&&winner&&<div style={{fontSize:12,color:"#10b981",marginTop:3}}>🏆 {winner}</div>}
+        {m.done&&winner&&<div style={{fontSize:12,color:"#10b981",marginTop:3}}>🏆 {winner}{m.walkover?" (W/O)":""}</div>}
         {locked&&<div style={{fontSize:11,color:"#f59e0b",marginTop:3}}>🔒 Locked after 24h</div>}
         <div style={{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}}>
           {!m.done&&<button onClick={onGoLive} style={{padding:"6px 12px",background:isLive?"#2d1515":"#1a2744",border:`1px solid ${isLive?"#ef444466":"#334155"}`,borderRadius:6,color:isLive?"#ef4444":"#93c5fd",fontSize:12,cursor:"pointer"}}>{isLive?"📡 Watch Live":"📡 Go Live"}</button>}
@@ -938,6 +938,7 @@ function GroupTable({label,standings}) {
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       {q&&<span style={{fontSize:10,background:"#064e3b",color:"#10b981",padding:"2px 6px",borderRadius:4,fontWeight:700}}>Q</span>}
                       <span style={{fontWeight:700,color:q?"#34d399":"#cbd5e1"}}>{s.n}</span>
+                      {(data?.withdrawn||[]).includes(s.n)&&<span style={{fontSize:10,background:"#7f1d1d",color:"#fca5a5",padding:"2px 6px",borderRadius:4,fontWeight:700}}>WD</span>}
                     </div>
                   </td>
                   <td style={{padding:"11px 12px",textAlign:"center",color:"#64748b",borderBottom:"1px solid #1e293b"}}>{s.mp}</td>
@@ -1588,6 +1589,7 @@ export default function App() {
           bets:     r.bets     || {},
           betPoints:r.betPoints|| {},
           users:    r.users    || {},
+          withdrawn: r.withdrawn || [],
         };
         setData(safe);
         if(init) setStatus("ok");
@@ -1756,6 +1758,35 @@ export default function App() {
   function removeTeam(name) {
     if(!window.confirm(`Remove "${name}"? Their matches will be kept.`)) return;
     upd(d=>isD?{...d,doubles:d.doubles.filter(t=>t!==name)}:{...d,singles:d.singles.filter(t=>t!==name)});
+  }
+
+  function withdrawTeam(name, isCurrentlyWD) {
+    if (isCurrentlyWD) {
+      // Reinstate — remove from withdrawn list
+      if (!window.confirm(`Reinstate "${name}"? Their walkovers will be reversed.`)) return;
+      upd(d=>({...d, withdrawn:(d.withdrawn||[]).filter(w=>w!==name)}));
+      return;
+    }
+    if (!window.confirm(`Withdraw "${name}"? All their pending matches will be awarded as walkovers to their opponents.`)) return;
+    upd(d=>{
+      const stamp = Date.now();
+      const newWithdrawn = [...(d.withdrawn||[]), name];
+      // Auto-complete all pending matches involving this team/player as walkovers
+      const walkover = (matches, key) => matches.map(m=>{
+        if (m.done) return m;
+        if (m.a!==name && m.b!==name) return m;
+        const winner = m.a===name ? m.b : m.a;
+        const sa = m.a===name ? "0-6 0-6" : "6-0 6-0";
+        const sb = m.a===name ? "6-0 6-0" : "0-6 0-6";
+        return {...m, sa, sb, done:true, completedAt:stamp, walkover:true};
+      });
+      return {
+        ...d,
+        withdrawn: newWithdrawn,
+        dMatches: walkover(d.dMatches, "d"),
+        sMatches: walkover(d.sMatches, "s"),
+      };
+    });
   }
 
   const statusColor={ok:"#10b981",saving:"#f59e0b",error:"#ef4444"}[status]||"#64748b";
@@ -2041,12 +2072,23 @@ export default function App() {
                 <button style={pbtn} onClick={()=>{setLg("doubles");setModal("addteam");setMf({teamName:""});}}>+ Add Team</button>
               </div>
               <div style={{border:"1px solid #1e293b",borderRadius:8,overflow:"hidden"}}>
-                {data.doubles.map((name,i)=>(
-                  <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:i%2===0?"#111827":"#0f172a",borderBottom:"1px solid #1e293b"}}>
-                    <span style={{fontWeight:600,color:"#cbd5e1"}}>{name}</span>
-                    <button onClick={()=>{setLg("doubles");removeTeam(name);}} style={redbtn}>Remove</button>
-                  </div>
-                ))}
+                {data.doubles.map((name,i)=>{
+                  const isWD = (data.withdrawn||[]).includes(name);
+                  return (
+                    <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:isWD?"#1a0a0a":i%2===0?"#111827":"#0f172a",borderBottom:"1px solid #1e293b"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        {isWD&&<span style={{fontSize:10,background:"#7f1d1d",color:"#fca5a5",padding:"2px 6px",borderRadius:4,fontWeight:700}}>WD</span>}
+                        <span style={{fontWeight:600,color:isWD?"#64748b":"#cbd5e1",textDecoration:isWD?"line-through":"none"}}>{name}</span>
+                      </div>
+                      <div style={{display:"flex",gap:6}}>
+                        <button onClick={()=>withdrawTeam(name,isWD)} style={{padding:"4px 10px",background:isWD?"#1e3a5f":"#7f1d1d",border:"none",borderRadius:6,color:isWD?"#93c5fd":"#fca5a5",fontSize:11,cursor:"pointer"}}>
+                          {isWD?"Reinstate":"Withdraw"}
+                        </button>
+                        <button onClick={()=>{setLg("doubles");removeTeam(name);}} style={redbtn}>Remove</button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
             <div>
@@ -2055,12 +2097,23 @@ export default function App() {
                 <button style={pbtn} onClick={()=>{setLg("singles");setModal("addteam");setMf({teamName:""});}}>+ Add Player</button>
               </div>
               <div style={{border:"1px solid #1e293b",borderRadius:8,overflow:"hidden"}}>
-                {data.singles.map((name,i)=>(
-                  <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:i%2===0?"#111827":"#0f172a",borderBottom:"1px solid #1e293b"}}>
-                    <span style={{fontWeight:600,color:"#cbd5e1"}}>{name}</span>
-                    <button onClick={()=>{setLg("singles");removeTeam(name);}} style={redbtn}>Remove</button>
-                  </div>
-                ))}
+                {data.singles.map((name,i)=>{
+                  const isWD = (data.withdrawn||[]).includes(name);
+                  return (
+                    <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:isWD?"#1a0a0a":i%2===0?"#111827":"#0f172a",borderBottom:"1px solid #1e293b"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        {isWD&&<span style={{fontSize:10,background:"#7f1d1d",color:"#fca5a5",padding:"2px 6px",borderRadius:4,fontWeight:700}}>WD</span>}
+                        <span style={{fontWeight:600,color:isWD?"#64748b":"#cbd5e1",textDecoration:isWD?"line-through":"none"}}>{name}</span>
+                      </div>
+                      <div style={{display:"flex",gap:6}}>
+                        <button onClick={()=>withdrawTeam(name,isWD)} style={{padding:"4px 10px",background:isWD?"#1e3a5f":"#7f1d1d",border:"none",borderRadius:6,color:isWD?"#93c5fd":"#fca5a5",fontSize:11,cursor:"pointer"}}>
+                          {isWD?"Reinstate":"Withdraw"}
+                        </button>
+                        <button onClick={()=>{setLg("singles");removeTeam(name);}} style={redbtn}>Remove</button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
