@@ -108,6 +108,8 @@ function addPoint(live, who) {
 
   // TIEBREAK MODE: points go 1,2,3... first to 7 with 2-point lead
   if (l.isTiebreak) {
+    // Safety: ensure points are valid tiebreak counts (not leftover tennis scores like 3=40)
+    if (l.points.a > 50 || l.points.b > 50) l.points = {a:0,b:0};
     l.points[who]++;
     const pw = l.points[who], po = l.points[opp];
     // Switch serve every 2 points in tiebreak
@@ -673,15 +675,22 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
   const bigNum = {fontSize:56,fontWeight:900,lineHeight:1,color:"#fff"};
   const smallNum = {fontSize:22,fontWeight:700,color:"#64748b"};
 
-  const setBox = (s,i,isCurrent) => (
-    <div key={i} style={{textAlign:"center",background:isCurrent?"#1e3a5f":"#0f172a",borderRadius:8,padding:"8px 14px",minWidth:60,border:isCurrent?"1px solid #3b82f655":"1px solid transparent"}}>
-      {isCurrent&&<div style={{fontSize:9,color:"#3b82f6",fontWeight:700,letterSpacing:1,marginBottom:4,textTransform:"uppercase"}}>Current</div>}
-      {!isCurrent&&<div style={{fontSize:9,color:"#475569",marginBottom:4}}>Set {i+1}</div>}
-      <div style={{fontSize:22,fontWeight:900,color:s.a>s.b?"#34d399":"#94a3b8",lineHeight:1}}>{s.a}</div>
-      <div style={{fontSize:11,color:"#334155",margin:"3px 0"}}>—</div>
-      <div style={{fontSize:22,fontWeight:900,color:s.b>s.a?"#34d399":"#94a3b8",lineHeight:1}}>{s.b}</div>
-    </div>
-  );
+  const setBox = (s,i,isCurrent) => {
+    // In tiebreak, show tiebreak points instead of games (both stuck at 6)
+    const dispA = isCurrent && live.isTiebreak ? live.points.a : s.a;
+    const dispB = isCurrent && live.isTiebreak ? live.points.b : s.b;
+    const label = isCurrent && live.isTiebreak ? "Tiebreak" : isCurrent ? "Current" : `Set ${i+1}`;
+    const borderColor = isCurrent && live.isTiebreak ? "#a78bfa55" : isCurrent ? "#3b82f655" : "transparent";
+    const bg = isCurrent && live.isTiebreak ? "#2d1f4e" : isCurrent ? "#1e3a5f" : "#0f172a";
+    return (
+      <div key={i} style={{textAlign:"center",background:bg,borderRadius:8,padding:"8px 14px",minWidth:60,border:`1px solid ${borderColor}`}}>
+        <div style={{fontSize:9,color:isCurrent&&live.isTiebreak?"#a78bfa":isCurrent?"#3b82f6":"#475569",fontWeight:700,letterSpacing:1,marginBottom:4,textTransform:"uppercase"}}>{label}</div>
+        <div style={{fontSize:22,fontWeight:900,color:dispA>dispB?"#34d399":"#94a3b8",lineHeight:1}}>{dispA}</div>
+        <div style={{fontSize:11,color:"#334155",margin:"3px 0"}}>—</div>
+        <div style={{fontSize:22,fontWeight:900,color:dispB>dispA?"#34d399":"#94a3b8",lineHeight:1}}>{dispB}</div>
+      </div>
+    );
+  };
 
   return (
     <div style={{position:"fixed",inset:0,background:"#07090f",zIndex:1000,display:"flex",flexDirection:"column",overflowY:"auto"}}>
