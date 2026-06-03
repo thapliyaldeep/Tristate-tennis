@@ -827,6 +827,14 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
             <button onClick={onEndMatch} style={{...pbtn,fontSize:15,padding:"12px 32px",background:"linear-gradient(135deg,#059669,#10b981)"}}>
               ✓ Save & End Match
             </button>
+            {canUndo&&(
+              <div style={{marginTop:12}}>
+                <button onClick={onUndo}
+                  style={{...sbtn,fontSize:12}}>
+                  ↩ Undo Last Point (Error?)
+                </button>
+              </div>
+            )}
           </div>
         )}
 
