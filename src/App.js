@@ -1705,7 +1705,8 @@ export default function App() {
 
   function handlePoint(side) {
     const m = getCurrentLiveMatch(); if(!m) return;
-    const live = addPoint(m.live||newLive(), side);
+    const prevLive = m.live || newLive();
+    const live = addPoint(prevLive, side);
     const type = liveMatch.type;
     // Update UI instantly
     const nd = (d=>{
@@ -1713,12 +1714,19 @@ export default function App() {
       return {...d,[key]:d[key].map(x=>x.id===m.id?{...x,live}:x)};
     })(data);
     setData(nd);
-    // Save to Firebase in background — debounced to reduce calls during rapid play
     pendingSave.current = nd;
     clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(()=>{
-      dbSave(pendingSave.current).catch(()=>{});
-    }, 1500); // longer debounce for live scoring
+    // Save immediately on game/set win — these are critical state changes
+    const gameWon = live.sets.length > prevLive.sets.length ||
+                    live.games.a + live.games.b !== prevLive.games.a + prevLive.games.b ||
+                    live.isTiebreak !== prevLive.isTiebreak;
+    if (gameWon) {
+      dbSave(nd).catch(()=>{});
+    } else {
+      saveTimer.current = setTimeout(()=>{
+        dbSave(pendingSave.current).catch(()=>{});
+      }, 500);
+    }
   }
 
   function handleUndo() {
