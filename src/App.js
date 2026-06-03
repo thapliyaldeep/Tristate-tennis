@@ -110,12 +110,25 @@ function addPoint(live, who) {
   if (l.isTiebreak) {
     l.points[who]++;
     const pw = l.points[who], po = l.points[opp];
-    // Switch serve every 2 points in tiebreak (after first point, then every 2)
+    // Switch serve every 2 points in tiebreak
     const totalPts = l.points.a + l.points.b;
     if (totalPts % 2 === 1) l.serving = l.serving==="a"?"b":"a";
-    // Win tiebreak: 7+ points with 2-point lead
+    // Win tiebreak: first to 7 with 2-point lead — handle set win directly
     if (pw >= 7 && pw - po >= 2) {
-      l = winGame(l, who);
+      // Set ends 7-6 — don't go through winGame's game counting
+      if (who==="a") l.games.a = 7; else l.games.b = 7;
+      // Other side stays at 6
+      if (who==="a") l.games.b = 6; else l.games.a = 6;
+      l.totalGames = (l.totalGames||0) + 1;
+      l.gameTs = [...(l.gameTs||[]), now];
+      l.sets.push({a:l.games.a, b:l.games.b, endTs:now, tiebreak:true});
+      l.games = {a:0,b:0};
+      l.points = {a:0,b:0};
+      l.isTiebreak = false;
+      l.deuce = false;
+      l.adv = null;
+      l.serving = l.serving==="a"?"b":"a"; // switch after tiebreak
+      l.setTs = [...(l.setTs||[]), now];
     }
     return l;
   }
