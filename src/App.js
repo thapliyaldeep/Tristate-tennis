@@ -2300,8 +2300,8 @@ export default function App() {
         {tab==="manage"&&isManager&&(
           <ManageTab data={data} upd={upd} firebaseUser={firebaseUser}/>
         )}
+      </div>
 
-      {/* MODALS */}
       {modal==="match"&&(
         <Modal title={`Schedule ${isD?"Doubles":"Singles"} Match`} onClose={()=>setModal(null)}>
           <label style={lbl}>{isD?"Team 1":"Player 1"}</label>
