@@ -879,10 +879,10 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
 }
 
 // ─── Match Card ───────────────────────────────────────────────────────────────
-function MatchCard({m, onScore, onDel, onGoLive, onViewStats}) {
+function MatchCard({m, onScore, onDel, onGoLive, onViewStats, canOverride=false}) {
   const wa=m.done?calcWins(m.sa):null, wb=m.done?calcWins(m.sb):null;
   const winner=wa&&wb?(wa.w>wb.w?m.a:m.b):null;
-  const locked=m.done&&!isEditable(m);
+  const locked=m.done&&!isEditable(m)&&!canOverride;
   const isLive=!!m.live&&!m.done;
   const sw=m.live?setsWon(m.live):{a:0,b:0};
 
@@ -909,7 +909,8 @@ function MatchCard({m, onScore, onDel, onGoLive, onViewStats}) {
       <div style={{textAlign:"right"}}>
         <div style={{fontSize:12,color:"#64748b"}}>{m.date}{m.time?` · ${m.time}`:""}{m.venue?` · 📍${m.venue}`:""}</div>
         {m.done&&winner&&<div style={{fontSize:12,color:"#10b981",marginTop:3}}>🏆 {winner}{m.walkover?" (W/O)":""}</div>}
-        {locked&&<div style={{fontSize:11,color:"#f59e0b",marginTop:3}}>🔒 Locked after 24h</div>}
+        {m.done&&!isEditable(m)&&!canOverride&&<div style={{fontSize:11,color:"#f59e0b",marginTop:3}}>🔒 Locked after 24h</div>}
+          {m.done&&!isEditable(m)&&canOverride&&<div style={{fontSize:11,color:"#a78bfa",marginTop:3}}>🔓 Manager override</div>}
         <div style={{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}}>
           {!m.done&&<button onClick={onGoLive} style={{padding:"6px 12px",background:isLive?"#2d1515":"#1a2744",border:`1px solid ${isLive?"#ef444466":"#334155"}`,borderRadius:6,color:isLive?"#ef4444":"#93c5fd",fontSize:12,cursor:"pointer"}}>{isLive?"📡 Watch Live":"📡 Go Live"}</button>}
           {!locked&&!isLive&&<button onClick={onScore} style={{padding:"6px 12px",background:"#1e3a5f",border:"none",borderRadius:6,color:"#93c5fd",fontSize:12,cursor:"pointer"}}>{m.done?"✏️ Edit":"📝 Score"}</button>}
@@ -2065,6 +2066,7 @@ export default function App() {
                     onDel={()=>delMatch(m.id)}
                     onGoLive={()=>{}}
                     onViewStats={m.matchStats?()=>setStatsMatch(m.id):null}
+                    canOverride={isManager}
                   />
                 ))}
               </div>
