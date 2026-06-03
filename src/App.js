@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth, LoginPage, PendingApproval, AdminPanel, signOut, auth } from "./Auth";
 
 const FB_URL = "https://tristate-tennis-default-rtdb.firebaseio.com/state.json";
@@ -47,14 +47,20 @@ function futureDates() {
   return ALL_DATES.filter(d=>{ const [m,dy]=d.split("/").map(Number); return new Date(2026,m-1,dy)>=today; });
 }
 
-// GROUPS now loaded from Firebase data dynamically
+const GROUPS = {
+  doubles: {
+    A: ["Dhar/Vineet","Akash/Micky","Bobby/Satendra","Shailesh/Uzair"],
+    B: ["Nitin/Ashish","Jai/Deep","Tarun/Sumit","Sanjay/Ravi"],
+  },
+  singles: {
+    A: ["Bobby","Tushar","Pratyush","Sanjay","Akash"],
+    B: ["Dhar","Sumit","Deep","Ashish","Viraj"],
+  },
+};
 
 const DEFAULT = {
   doubles:  ["Nitin/Ashish","Jai/Deep","Tarun/Sumit","Bobby/Satendra","Akash/Micky","Dhar/Vineet","Sanjay/Ravi","Shailesh/Uzair"],
   singles:  ["Ashish","Deep","Sumit","Bobby","Akash","Dhar","Sanjay","Pratyush","Viraj","Tushar"],
-  players:  [],
-  doublesGroups: { A:["Dhar/Vineet","Akash/Micky","Bobby/Satendra","Shailesh/Uzair"], B:["Nitin/Ashish","Jai/Deep","Tarun/Sumit","Sanjay/Ravi"] },
-  singlesGroups: { A:["Bobby","Tushar","Pratyush","Sanjay","Akash"], B:["Dhar","Sumit","Deep","Ashish","Viraj"] },
   dAvail:   {
     "Nitin/Ashish":  {"5/17":"4pm w Jai-Deep","5/18":"6pm avail","5/22":"5:30pm avail"},
     "Jai/Deep":      {"5/17":"4pm w Nitin-Ashish"},
@@ -65,7 +71,7 @@ const DEFAULT = {
     "Sanjay/Ravi":   {"5/16":"5pm avail","5/17":"Anytime","5/20":"6pm avail","5/21":"6pm avail"},
   },
   sAvail:   {"Dhar":{"5/15":"5pm+","5/16":"8-10am"},"Viraj":{"5/15":"5pm+"}},
-  dMatches: [], sMatches: [], did:1, sid:1, banter: [], polls: {}, tournPoll: {doubles:{}, singles:{}}, bets: {}, betPoints: {},
+  dMatches: [], sMatches: [], did:1, sid:1, banter: [], polls: {}, tournPoll: {doubles:{}, singles:{}}, bets: {}, betPoints: {}, withdrawn: [], managers: ["deepcolour@gmail.com"],
 };
 
 // ─── Tennis scoring logic ─────────────────────────────────────────────────────
@@ -79,30 +85,59 @@ function newLive(serving="a") {
     deuce: false,
     adv: null,
     serving,
-    history: [],        // stack of previous states for undo
+    initialServer: serving, // store who served first — needed for BREAK detection
+    history: [],
     startTs: Date.now(),
-    setTs: [Date.now()],   // timestamp when each set started
-    gameTs: [Date.now()],  // timestamp when each game started
-    pointLog: [],          // [{who, ts, gameIdx, setIdx}]
+    setTs: [Date.now()],
+    gameTs: [Date.now()],
+    pointLog: [],
     totalGames: 0,
   };
 }
 
 // Returns updated live state after a point won by "a" or "b"
 function addPoint(live, who) {
-  // Save snapshot to history before mutating (for undo)
   const snapshot = JSON.parse(JSON.stringify(live));
-  snapshot.history = []; // don't nest history inside history
+  snapshot.history = [];
   let l = JSON.parse(JSON.stringify(live));
   l.history = [...(l.history||[]), snapshot];
-  if (l.history.length > 50) l.history = l.history.slice(-50); // cap at 50
+  if (l.history.length > 50) l.history = l.history.slice(-50);
   const opp = who==="a"?"b":"a";
   const now = Date.now();
 
-  // Log the point (include current server for stats)
-  l.pointLog = [...(l.pointLog||[]), {who, ts:now, set:l.sets.length, game:l.totalGames||0, server:l.serving}];
+  const isTBPoint = !!l.isTiebreak;
+  l.pointLog = [...(l.pointLog||[]), {who, ts:now, set:l.sets.length, game:l.totalGames||0, server:l.serving, tb:isTBPoint}];
 
-  // Deuce/advantage logic
+  // TIEBREAK MODE: points go 1,2,3... first to 7 with 2-point lead
+  if (l.isTiebreak) {
+    // Safety: ensure points are valid tiebreak counts (not leftover tennis scores like 3=40)
+    if (l.points.a > 50 || l.points.b > 50) l.points = {a:0,b:0};
+    l.points[who]++;
+    const pw = l.points[who], po = l.points[opp];
+    // Switch serve every 2 points in tiebreak
+    const totalPts = l.points.a + l.points.b;
+    if (totalPts % 2 === 1) l.serving = l.serving==="a"?"b":"a";
+    // Win tiebreak: first to 7 with 2-point lead — handle set win directly
+    if (pw >= 7 && pw - po >= 2) {
+      // Set ends 7-6 — don't go through winGame's game counting
+      if (who==="a") l.games.a = 7; else l.games.b = 7;
+      // Other side stays at 6
+      if (who==="a") l.games.b = 6; else l.games.a = 6;
+      l.totalGames = (l.totalGames||0) + 1;
+      l.gameTs = [...(l.gameTs||[]), now];
+      l.sets.push({a:l.games.a, b:l.games.b, endTs:now, tiebreak:true});
+      l.games = {a:0,b:0};
+      l.points = {a:0,b:0};
+      l.isTiebreak = false;
+      l.deuce = false;
+      l.adv = null;
+      l.serving = l.serving==="a"?"b":"a"; // switch after tiebreak
+      l.setTs = [...(l.setTs||[]), now];
+    }
+    return l;
+  }
+
+  // NORMAL SCORING
   if (l.deuce) {
     if (l.adv===who) { l = winGame(l, who); }
     else if (l.adv===opp) { l.adv = null; }
@@ -141,10 +176,21 @@ function winGame(live, who) {
   l.gameTs = [...(l.gameTs||[]), now];
 
   const gw = l.games[who], go = l.games[opp];
-  const setWon = (gw>=6 && gw-go>=2) || gw===7;
+  const currentSet = l.sets.length; // 0=set1, 1=set2, 2=set3
+  const isDecider  = currentSet >= 2; // set 3 onwards — no tiebreak
+
+  // At 6-6: tiebreak in sets 1&2, but keep playing in decider set
+  if (l.games.a===6 && l.games.b===6 && !isDecider) {
+    l.isTiebreak = true;
+    l.points = {a:0,b:0};
+    return l;
+  }
+  // Normal set win: 6+ games with 2-game lead (always applies in decider)
+  const setWon = gw>=6 && gw-go>=2;
   if (setWon) {
     l.sets.push({a:l.games.a, b:l.games.b, endTs:now});
     l.games = {a:0,b:0};
+    l.isTiebreak = false;
     l.setTs = [...(l.setTs||[]), now];
   }
   return l;
@@ -172,6 +218,7 @@ function liveToScore(live, nameA, nameB) {
 }
 
 function displayPoints(live, side) {
+  if (live.isTiebreak) return live.points[side].toString(); // show raw count in tiebreak
   if (live.deuce) return live.adv===side ? "Ad" : live.adv ? "" : "40";
   return PTS[live.points[side]].toString();
 }
@@ -242,33 +289,57 @@ function buildGameHistory(live, nameA, nameB) {
   const PTS_LABEL = [0,15,30,40];
   const pointLog = live.pointLog || [];
   const games = [];
-  let currentGame = { points:[], setScore:"0-0", gameScore:"0-0", server:live.serving||"a" };
-  let gamesA=0, gamesB=0, setsA=0, setsB=0;
+  let gamesA=0, gamesB=0;
   let pA=0, pB=0, deuce=false, adv=null;
-  let server = live.serving||"a";
+  let server = live.initialServer || live.serving || "a";
+  let currentGame = { points:[], setScore:"0-0", server };
+  let inTiebreak = false;
+  let tbPointsA=0, tbPointsB=0;
+  let tbGame = { points:[], setScore:"0-0", server };
 
   for (const pt of pointLog) {
     const who = pt.who;
     const opp = who==="a"?"b":"a";
+
+    if (pt.tb) {
+      // Tiebreak point
+      if (!inTiebreak) {
+        inTiebreak = true;
+        tbPointsA=0; tbPointsB=0;
+        tbGame = { points:[], setScore:`${gamesA}-${gamesB}`, server };
+      }
+      tbGame.points.push({who, pA:tbPointsA, pB:tbPointsB, tb:true});
+      if (who==="a") tbPointsA++; else tbPointsB++;
+      const pw=who==="a"?tbPointsA:tbPointsB, po=who==="a"?tbPointsB:tbPointsA;
+      if (pw>=7 && pw-po>=2) {
+        // Tiebreak won
+        const winGames = who==="a" ? {a:7,b:6} : {a:6,b:7};
+        games.push({...tbGame, winner:who, isBreak:false, isTiebreak:true,
+          setScore:`${winGames.a}-${winGames.b}`});
+        gamesA=0; gamesB=0; inTiebreak=false;
+        server=server==="a"?"b":"a";
+        currentGame={points:[],setScore:`${gamesA}-${gamesB}`,server};
+      }
+      continue;
+    }
+
+    // Normal point
+    inTiebreak = false;
     currentGame.points.push({who, pA, pB, deuce, adv});
 
-    // Advance score
     if (deuce) {
       if (adv===who) {
-        // game won
+        // Game won
         if (who==="a") gamesA++; else gamesB++;
         const isBreak = server!==who;
         games.push({...currentGame, winner:who, isBreak,
           setScore:`${gamesA}-${gamesB}`, server});
         pA=0;pB=0;deuce=false;adv=null;
-        server = server==="a"?"b":"a";
-        // check set
+        server=server==="a"?"b":"a";
+        // Check set
         const gw=who==="a"?gamesA:gamesB, go=who==="a"?gamesB:gamesA;
-        if ((gw>=6&&gw-go>=2)||gw===7) {
-          if(who==="a")setsA++;else setsB++;
-          gamesA=0;gamesB=0;
-        }
-        currentGame={points:[],setScore:`${gamesA}-${gamesB}`,gameScore:"0-0",server};
+        if ((gw>=6&&gw-go>=2)||gw===7) { gamesA=0;gamesB=0; }
+        currentGame={points:[],setScore:`${gamesA}-${gamesB}`,server};
       } else if (adv===opp) { adv=null; }
       else { adv=who; }
     } else {
@@ -283,21 +354,24 @@ function buildGameHistory(live, nameA, nameB) {
         pA=0;pB=0;deuce=false;adv=null;
         server=server==="a"?"b":"a";
         const gw=w==="a"?gamesA:gamesB,go=w==="a"?gamesB:gamesA;
-        if((gw>=6&&gw-go>=2)||gw===7){
-          if(w==="a")setsA++;else setsB++;
-          gamesA=0;gamesB=0;
-        }
-        currentGame={points:[],setScore:`${gamesA}-${gamesB}`,gameScore:"0-0",server};
+        if((gw>=6&&gw-go>=2)||gw===7){gamesA=0;gamesB=0;}
+        currentGame={points:[],setScore:`${gamesA}-${gamesB}`,server};
       }
     }
   }
-  return games.reverse(); // newest first
+  return games.reverse();
 }
+
 
 function PointsHistory({live, nameA, nameB}) {
   const PTS = [0,15,30,40,"AD"];
   const games = buildGameHistory(live, nameA, nameB);
-  const [expanded, setExpanded] = useState(0); // which game is expanded
+  const [expanded, setExpanded] = useState(0);
+
+  function isTiebreakGame(g) {
+    const parts = g.setScore.split("-").map(Number);
+    return (parts[0]===7&&parts[1]===6)||(parts[0]===6&&parts[1]===7);
+  }
 
   if (games.length===0) return (
     <div style={{textAlign:"center",color:"#64748b",padding:"40px 0",fontSize:13}}>No completed games yet</div>
@@ -308,49 +382,71 @@ function PointsHistory({live, nameA, nameB}) {
       {games.map((g,i)=>{
         const winnerName = g.winner==="a"?nameA:nameB;
         const isOpen = expanded===i;
+        const tbGame = isTiebreakGame(g) || !!g.isTiebreak;
         return (
-          <div key={i} style={{marginBottom:8,border:"1px solid #1e293b",borderRadius:10,overflow:"hidden"}}>
-            {/* Game header */}
+          <div key={i} style={{marginBottom:8,border:`1px solid ${tbGame?"#7c3aed44":"#1e293b"}`,borderRadius:10,overflow:"hidden"}}>
             <div onClick={()=>setExpanded(isOpen?-1:i)}
-              style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-                padding:"10px 14px",background:isOpen?"#1e293b":"#111827",cursor:"pointer"}}>
+              style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:isOpen?"#1e293b":"#111827",cursor:"pointer"}}>
               <div>
+                {tbGame&&<span style={{marginRight:6,fontSize:10,background:"#7c3aed33",color:"#a78bfa",padding:"2px 6px",borderRadius:4,fontWeight:700}}>TIEBREAK</span>}
                 <span style={{fontSize:12,color:"#64748b"}}>Score: ({g.setScore}) </span>
                 <span style={{fontSize:12,fontWeight:700,color:"#e2e8f0"}}>Won by {winnerName}</span>
-                {g.isBreak&&<span style={{marginLeft:8,fontSize:10,background:"#7c3aed33",color:"#a78bfa",padding:"2px 6px",borderRadius:4,fontWeight:700}}>BREAK</span>}
+                {g.isBreak&&!tbGame&&<span style={{marginLeft:8,fontSize:10,background:"#7c3aed33",color:"#a78bfa",padding:"2px 6px",borderRadius:4,fontWeight:700}}>BREAK</span>}
               </div>
               <span style={{color:"#64748b",fontSize:12}}>{isOpen?"▲":"▼"}</span>
             </div>
-            {/* Point detail */}
             {isOpen&&(
               <div style={{padding:"12px 14px",background:"#0e1320"}}>
-                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"6px 12px",alignItems:"center"}}>
-                  <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>{nameA.split("/")[0]}</div>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {g.points.map((p,j)=>{
-                      const pts = p.deuce?"40":PTS[p.pA]?.toString()||"0";
-                      const isCurrent = p.who==="a";
-                      return <span key={j} style={{fontSize:12,fontWeight:isCurrent?700:400,color:isCurrent?"#34d399":"#64748b",minWidth:24,textAlign:"center"}}>{pts}</span>;
-                    })}
-                    <span style={{fontSize:12,fontWeight:700,color:g.winner==="a"?"#34d399":"#64748b"}}>
-                      {g.winner==="a"?"✓":""}
-                    </span>
+                {tbGame ? (
+                  <div>
+                    <div style={{fontSize:11,color:"#a78bfa",marginBottom:8,fontWeight:600}}>🎾 Tiebreak Points</div>
+                    <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"6px 12px",alignItems:"center"}}>
+                      <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>{nameA.split("/")[0]}</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {g.points.map((p,j)=>{
+                          const isCurrent=p.who==="a";
+                          return <span key={j} style={{fontSize:13,fontWeight:isCurrent?700:400,color:isCurrent?"#34d399":"#64748b",minWidth:20,textAlign:"center"}}>{p.pA}</span>;
+                        })}
+                        <span style={{fontSize:13,fontWeight:700,color:g.winner==="a"?"#34d399":"transparent"}}>✓</span>
+                      </div>
+                      <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>{nameB.split("/")[0]}</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {g.points.map((p,j)=>{
+                          const isCurrent=p.who==="b";
+                          return <span key={j} style={{fontSize:13,fontWeight:isCurrent?700:400,color:isCurrent?"#34d399":"#64748b",minWidth:20,textAlign:"center"}}>{p.pB}</span>;
+                        })}
+                        <span style={{fontSize:13,fontWeight:700,color:g.winner==="b"?"#34d399":"transparent"}}>✓</span>
+                      </div>
+                    </div>
+                    <div style={{marginTop:8,fontSize:10,color:"#475569"}}>{g.points.length} points played</div>
                   </div>
-                  <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>{nameB.split("/")[0]}</div>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {g.points.map((p,j)=>{
-                      const pts = p.deuce?"40":PTS[p.pB]?.toString()||"0";
-                      const isCurrent = p.who==="b";
-                      return <span key={j} style={{fontSize:12,fontWeight:isCurrent?700:400,color:isCurrent?"#34d399":"#64748b",minWidth:24,textAlign:"center"}}>{pts}</span>;
-                    })}
-                    <span style={{fontSize:12,fontWeight:700,color:g.winner==="b"?"#34d399":"#64748b"}}>
-                      {g.winner==="b"?"✓":""}
-                    </span>
+                ) : (
+                  <div>
+                    <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"6px 12px",alignItems:"center"}}>
+                      <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>{nameA.split("/")[0]}</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {g.points.map((p,j)=>{
+                          const pts=p.deuce?"40":PTS[p.pA]?.toString()||"0";
+                          const isCurrent=p.who==="a";
+                          return <span key={j} style={{fontSize:12,fontWeight:isCurrent?700:400,color:isCurrent?"#34d399":"#64748b",minWidth:24,textAlign:"center"}}>{pts}</span>;
+                        })}
+                        <span style={{fontSize:12,fontWeight:700,color:g.winner==="a"?"#34d399":"transparent"}}>✓</span>
+                      </div>
+                      <div style={{fontSize:11,color:"#64748b",fontWeight:600}}>{nameB.split("/")[0]}</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {g.points.map((p,j)=>{
+                          const pts=p.deuce?"40":PTS[p.pB]?.toString()||"0";
+                          const isCurrent=p.who==="b";
+                          return <span key={j} style={{fontSize:12,fontWeight:isCurrent?700:400,color:isCurrent?"#34d399":"#64748b",minWidth:24,textAlign:"center"}}>{pts}</span>;
+                        })}
+                        <span style={{fontSize:12,fontWeight:700,color:g.winner==="b"?"#34d399":"transparent"}}>✓</span>
+                      </div>
+                    </div>
+                    <div style={{marginTop:8,fontSize:10,color:"#475569"}}>
+                      {g.server==="a"?nameA:nameB} serving · {g.points.length} points played
+                    </div>
                   </div>
-                </div>
-                <div style={{marginTop:8,fontSize:10,color:"#475569"}}>
-                  {g.server==="a"?nameA:nameB} serving · {g.points.length} points played
-                </div>
+                )}
               </div>
             )}
           </div>
@@ -359,7 +455,6 @@ function PointsHistory({live, nameA, nameB}) {
     </div>
   );
 }
-
 function MomentumChart({live, nameA, nameB}) {
   const pointLog = live.pointLog||[];
   if (pointLog.length<2) return (
@@ -606,15 +701,22 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
   const bigNum = {fontSize:56,fontWeight:900,lineHeight:1,color:"#fff"};
   const smallNum = {fontSize:22,fontWeight:700,color:"#64748b"};
 
-  const setBox = (s,i,isCurrent) => (
-    <div key={i} style={{textAlign:"center",background:isCurrent?"#1e3a5f":"#0f172a",borderRadius:8,padding:"8px 14px",minWidth:60,border:isCurrent?"1px solid #3b82f655":"1px solid transparent"}}>
-      {isCurrent&&<div style={{fontSize:9,color:"#3b82f6",fontWeight:700,letterSpacing:1,marginBottom:4,textTransform:"uppercase"}}>Current</div>}
-      {!isCurrent&&<div style={{fontSize:9,color:"#475569",marginBottom:4}}>Set {i+1}</div>}
-      <div style={{fontSize:22,fontWeight:900,color:s.a>s.b?"#34d399":"#94a3b8",lineHeight:1}}>{s.a}</div>
-      <div style={{fontSize:11,color:"#334155",margin:"3px 0"}}>—</div>
-      <div style={{fontSize:22,fontWeight:900,color:s.b>s.a?"#34d399":"#94a3b8",lineHeight:1}}>{s.b}</div>
-    </div>
-  );
+  const setBox = (s,i,isCurrent) => {
+    // In tiebreak, show tiebreak points instead of games (both stuck at 6)
+    const dispA = isCurrent && live.isTiebreak ? live.points.a : s.a;
+    const dispB = isCurrent && live.isTiebreak ? live.points.b : s.b;
+    const label = isCurrent && live.isTiebreak ? "Tiebreak" : isCurrent ? "Current" : `Set ${i+1}`;
+    const borderColor = isCurrent && live.isTiebreak ? "#a78bfa55" : isCurrent ? "#3b82f655" : "transparent";
+    const bg = isCurrent && live.isTiebreak ? "#2d1f4e" : isCurrent ? "#1e3a5f" : "#0f172a";
+    return (
+      <div key={i} style={{textAlign:"center",background:bg,borderRadius:8,padding:"8px 14px",minWidth:60,border:`1px solid ${borderColor}`}}>
+        <div style={{fontSize:9,color:isCurrent&&live.isTiebreak?"#a78bfa":isCurrent?"#3b82f6":"#475569",fontWeight:700,letterSpacing:1,marginBottom:4,textTransform:"uppercase"}}>{label}</div>
+        <div style={{fontSize:22,fontWeight:900,color:dispA>dispB?"#34d399":"#94a3b8",lineHeight:1}}>{dispA}</div>
+        <div style={{fontSize:11,color:"#334155",margin:"3px 0"}}>—</div>
+        <div style={{fontSize:22,fontWeight:900,color:dispB>dispA?"#34d399":"#94a3b8",lineHeight:1}}>{dispB}</div>
+      </div>
+    );
+  };
 
   return (
     <div style={{position:"fixed",inset:0,background:"#07090f",zIndex:1000,display:"flex",flexDirection:"column",overflowY:"auto"}}>
@@ -673,7 +775,10 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
           </div>
         </div>
 
-        {live.deuce&&!live.adv&&!over&&(
+        {live.isTiebreak&&!over&&(
+          <div style={{background:"#7c3aed33",color:"#a78bfa",fontWeight:700,fontSize:14,padding:"6px 20px",borderRadius:20,letterSpacing:2}}>🎾 TIEBREAK</div>
+        )}
+        {live.deuce&&!live.adv&&!over&&!live.isTiebreak&&(
           <div style={{background:"#1e3a5f",color:"#93c5fd",fontWeight:700,fontSize:14,padding:"6px 20px",borderRadius:20,letterSpacing:2}}>DEUCE</div>
         )}
 
@@ -722,6 +827,14 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
             <button onClick={onEndMatch} style={{...pbtn,fontSize:15,padding:"12px 32px",background:"linear-gradient(135deg,#059669,#10b981)"}}>
               ✓ Save & End Match
             </button>
+            {canUndo&&(
+              <div style={{marginTop:12}}>
+                <button onClick={onUndo}
+                  style={{...sbtn,fontSize:12}}>
+                  ↩ Undo Last Point (Error?)
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -766,10 +879,10 @@ function LiveScoreView({m, isKeeper, onPoint, onUndo, onEndMatch, onClose, onHan
 }
 
 // ─── Match Card ───────────────────────────────────────────────────────────────
-function MatchCard({m, onScore, onDel, onGoLive, onViewStats}) {
+function MatchCard({m, onScore, onDel, onGoLive, onViewStats, canOverride=false}) {
   const wa=m.done?calcWins(m.sa):null, wb=m.done?calcWins(m.sb):null;
   const winner=wa&&wb?(wa.w>wb.w?m.a:m.b):null;
-  const locked=m.done&&!isEditable(m);
+  const locked=m.done&&!isEditable(m)&&!canOverride;
   const isLive=!!m.live&&!m.done;
   const sw=m.live?setsWon(m.live):{a:0,b:0};
 
@@ -795,8 +908,9 @@ function MatchCard({m, onScore, onDel, onGoLive, onViewStats}) {
       </div>
       <div style={{textAlign:"right"}}>
         <div style={{fontSize:12,color:"#64748b"}}>{m.date}{m.time?` · ${m.time}`:""}{m.venue?` · 📍${m.venue}`:""}</div>
-        {m.done&&winner&&<div style={{fontSize:12,color:"#10b981",marginTop:3}}>🏆 {winner}</div>}
-        {locked&&<div style={{fontSize:11,color:"#f59e0b",marginTop:3}}>🔒 Locked after 24h</div>}
+        {m.done&&winner&&<div style={{fontSize:12,color:"#10b981",marginTop:3}}>🏆 {winner}{m.walkover?" (W/O)":""}</div>}
+        {m.done&&!isEditable(m)&&!canOverride&&<div style={{fontSize:11,color:"#f59e0b",marginTop:3}}>🔒 Locked after 24h</div>}
+          {m.done&&!isEditable(m)&&canOverride&&<div style={{fontSize:11,color:"#a78bfa",marginTop:3}}>🔓 Manager override</div>}
         <div style={{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}}>
           {!m.done&&<button onClick={onGoLive} style={{padding:"6px 12px",background:isLive?"#2d1515":"#1a2744",border:`1px solid ${isLive?"#ef444466":"#334155"}`,borderRadius:6,color:isLive?"#ef4444":"#93c5fd",fontSize:12,cursor:"pointer"}}>{isLive?"📡 Watch Live":"📡 Go Live"}</button>}
           {!locked&&!isLive&&<button onClick={onScore} style={{padding:"6px 12px",background:"#1e3a5f",border:"none",borderRadius:6,color:"#93c5fd",fontSize:12,cursor:"pointer"}}>{m.done?"✏️ Edit":"📝 Score"}</button>}
@@ -809,7 +923,7 @@ function MatchCard({m, onScore, onDel, onGoLive, onViewStats}) {
 }
 
 // ─── Group Table ─────────────────────────────────────────────────────────────
-function GroupTable({label,standings}) {
+function GroupTable({label,standings,withdrawn=[]}) {
   return (
     <div style={{marginBottom:24}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
@@ -834,6 +948,7 @@ function GroupTable({label,standings}) {
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                       {q&&<span style={{fontSize:10,background:"#064e3b",color:"#10b981",padding:"2px 6px",borderRadius:4,fontWeight:700}}>Q</span>}
                       <span style={{fontWeight:700,color:q?"#34d399":"#cbd5e1"}}>{s.n}</span>
+                      {withdrawn.includes(s.n)&&<span style={{fontSize:10,background:"#7f1d1d",color:"#fca5a5",padding:"2px 6px",borderRadius:4,fontWeight:700}}>WD</span>}
                     </div>
                   </td>
                   <td style={{padding:"11px 12px",textAlign:"center",color:"#64748b",borderBottom:"1px solid #1e293b"}}>{s.mp}</td>
@@ -1412,199 +1527,37 @@ function PollsTab({data, upd, allPlayers, firebaseUser}) {
 
 
 
-// ─── Manage Tab ──────────────────────────────────────────────────────────────
-function ManageTab({data, upd, firebaseUser}) {
-  const ADMIN_EMAIL_LOCAL = "deepcolour@gmail.com";
-  const isAdmin = firebaseUser?.email === ADMIN_EMAIL_LOCAL;
-  const [section, setSection] = useState("doubles"); // doubles | singles
-  const [mf, setMf] = useState({});
-
-  const registeredUsers = Object.values(data.users||{});
-  const registeredNames = registeredUsers.map(u=>u.name||u.email?.split("@")[0]||"Unknown");
-
-  const doublesTeams  = data.doubles||[];
-  const singlesPlayers= data.singles||[];
-  const doublesGroups = data.doublesGroups||{A:[],B:[]};
-  const singlesGroups = data.singlesGroups||{A:[],B:[]};
-
-  // ── Team management
-  async function addTeam(type, name) {
-    if (!name?.trim()) return;
-    upd(d=>({...d,
-      [type==="doubles"?"doubles":"singles"]: [...(d[type==="doubles"?"doubles":"singles"]||[]), name.trim()]
-    }));
-  }
-  async function removeTeam(type, name) {
-    if (!window.confirm(`Remove "${name}"?`)) return;
-    upd(d=>({...d,
-      [type==="doubles"?"doubles":"singles"]: (d[type==="doubles"?"doubles":"singles"]||[]).filter(t=>t!==name)
-    }));
-  }
-
-  // ── Group management
-  async function addToGroup(type, group, name) {
-    const key = type==="doubles"?"doublesGroups":"singlesGroups";
-    upd(d=>{
-      const groups = {...(d[key]||{A:[],B:[]})};
-      // Remove from other group first
-      Object.keys(groups).forEach(g=>{ groups[g]=(groups[g]||[]).filter(n=>n!==name); });
-      groups[group] = [...(groups[group]||[]), name];
-      return {...d, [key]:groups};
-    });
-  }
-  async function removeFromGroup(type, group, name) {
-    const key = type==="doubles"?"doublesGroups":"singlesGroups";
-    upd(d=>{
-      const groups = {...(d[key]||{A:[],B:[]})};
-      groups[group] = (groups[group]||[]).filter(n=>n!==name);
-      return {...d, [key]:groups};
-    });
-  }
-
-  const teams   = section==="doubles" ? doublesTeams   : singlesPlayers;
-  const groups  = section==="doubles" ? doublesGroups  : singlesGroups;
-  const ungrouped = teams.filter(t=>!Object.values(groups).flat().includes(t));
-
-  const secBtn = (id,label) => (
-    <button key={id} onClick={()=>setSection(id)} style={{
-      padding:"7px 18px",border:"none",borderRadius:7,cursor:"pointer",fontSize:13,fontWeight:600,
-      background:section===id?"#3b82f6":"#1e293b",color:section===id?"#fff":"#64748b"
-    }}>{label}</button>
-  );
-
+// ─── Completed Match Stats Viewer ────────────────────────────────────────────
+function CompletedMatchStats({m, onClose}) {
+  const [tab, setTab] = useState("points");
+  const live = m.matchStats;
+  if (!live) return null;
   return (
-    <div>
-      <div style={{fontWeight:700,color:"#fff",fontSize:16,marginBottom:20}}>Manage Teams & Groups</div>
-
-      <div style={{display:"flex",gap:8,marginBottom:24}}>
-        {secBtn("doubles","👥 Doubles")}
-        {secBtn("singles","👤 Singles")}
+    <div style={{position:"fixed",inset:0,background:"#07090f",zIndex:1000,display:"flex",flexDirection:"column",fontFamily:"system-ui,sans-serif"}}>
+      <div style={{background:"#0a1020",borderBottom:"1px solid #1e293b",padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+        <div>
+          <div style={{fontWeight:700,color:"#fff",fontSize:15}}>{m.a} vs {m.b}</div>
+          <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{m.date}{m.time?` · ${m.time}`:""} · {m.sa} / {m.sb}</div>
+        </div>
+        <button onClick={onClose} style={{background:"none",border:"none",color:"#64748b",fontSize:20,cursor:"pointer"}}>×</button>
       </div>
-
-      {/* Add team/player */}
-      {isAdmin&&(
-        <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:10,padding:"16px",marginBottom:20}}>
-          <div style={{fontWeight:700,color:"#fff",marginBottom:10,fontSize:14}}>
-            {section==="doubles"?"Add Doubles Team":"Add Singles Player"}
-          </div>
-          <div style={{display:"flex",gap:8}}>
-            <input value={mf.newName||""} onChange={e=>setMf(f=>({...f,newName:e.target.value}))}
-              placeholder={section==="doubles"?"e.g. Rahul/Vikram":"e.g. Rahul"}
-              style={{flex:1,padding:"9px 12px",background:"#0f172a",border:"1px solid #334155",borderRadius:8,color:"#e2e8f0",fontSize:13,outline:"none"}}
-              onKeyDown={e=>{if(e.key==="Enter"&&mf.newName?.trim()){addTeam(section,mf.newName);setMf(f=>({...f,newName:""}));}}}
-            />
-            <button onClick={()=>{addTeam(section,mf.newName);setMf(f=>({...f,newName:""}));}}
-              disabled={!mf.newName?.trim()}
-              style={{...pbtn,opacity:mf.newName?.trim()?1:.4}}>Add</button>
-          </div>
-          {section==="doubles"&&(
-            <div style={{fontSize:11,color:"#64748b",marginTop:6}}>
-              💡 Or select two registered players:
-              <div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap"}}>
-                <select value={mf.p1||""} onChange={e=>setMf(f=>({...f,p1:e.target.value}))}
-                  style={{padding:"6px 8px",background:"#0f172a",border:"1px solid #334155",borderRadius:6,color:"#e2e8f0",fontSize:12,outline:"none"}}>
-                  <option value="">Player 1…</option>
-                  {registeredNames.map(n=><option key={n} value={n}>{n}</option>)}
-                </select>
-                <select value={mf.p2||""} onChange={e=>setMf(f=>({...f,p2:e.target.value}))}
-                  style={{padding:"6px 8px",background:"#0f172a",border:"1px solid #334155",borderRadius:6,color:"#e2e8f0",fontSize:12,outline:"none"}}>
-                  <option value="">Player 2…</option>
-                  {registeredNames.filter(n=>n!==mf.p1).map(n=><option key={n} value={n}>{n}</option>)}
-                </select>
-                <button onClick={()=>{
-                  if(mf.p1&&mf.p2){addTeam("doubles",`${mf.p1}/${mf.p2}`);setMf(f=>({...f,p1:"",p2:""}));}
-                }} disabled={!mf.p1||!mf.p2}
-                  style={{...pbtn,padding:"6px 12px",fontSize:12,opacity:mf.p1&&mf.p2?1:.4}}>
-                  Form Team
-                </button>
-              </div>
-            </div>
-          )}
+      <div style={{display:"flex",gap:0,background:"#111827",borderBottom:"1px solid #1e293b",flexShrink:0}}>
+        {[["points","📋 Points"],["momentum","📈 Momentum"],["stats","📊 Stats"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{
+            flex:1,padding:"12px 4px",border:"none",cursor:"pointer",fontSize:13,
+            fontWeight:tab===id?700:400,background:"transparent",
+            color:tab===id?"#93c5fd":"#64748b",
+            borderBottom:tab===id?"2px solid #3b82f6":"2px solid transparent",
+          }}>{label}</button>
+        ))}
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
+        <div style={{maxWidth:500,margin:"0 auto"}}>
+          {tab==="points"&&<PointsHistory live={live} nameA={m.a} nameB={m.b}/>}
+          {tab==="momentum"&&<MomentumChart live={live} nameA={m.a} nameB={m.b}/>}
+          {tab==="stats"&&<MatchMetrics live={live} nameA={m.a} nameB={m.b}/>}
         </div>
-      )}
-
-      {/* Group A */}
-      {["A","B"].map(grp=>(
-        <div key={grp} style={{marginBottom:20}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <div style={{background:"#1e3a5f",color:"#93c5fd",fontWeight:800,fontSize:13,padding:"4px 12px",borderRadius:6}}>GROUP {grp}</div>
-              <span style={{fontSize:12,color:"#64748b"}}>{(groups[grp]||[]).length} {section==="doubles"?"teams":"players"}</span>
-            </div>
-            {isAdmin&&ungrouped.length>0&&(
-              <select onChange={e=>{if(e.target.value){addToGroup(section,grp,e.target.value);e.target.value="";}}}
-                style={{padding:"6px 10px",background:"#0f172a",border:"1px solid #334155",borderRadius:6,color:"#e2e8f0",fontSize:12,outline:"none"}}>
-                <option value="">+ Add to Group {grp}…</option>
-                {ungrouped.map(t=><option key={t} value={t}>{t}</option>)}
-              </select>
-            )}
-          </div>
-          <div style={{border:"1px solid #1e293b",borderRadius:8,overflow:"hidden"}}>
-            {(groups[grp]||[]).length===0
-              ?<div style={{padding:"16px",color:"#64748b",fontSize:13,textAlign:"center"}}>No {section==="doubles"?"teams":"players"} in this group yet</div>
-              :(groups[grp]||[]).map((name,i)=>(
-                <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",background:i%2===0?"#111827":"#0f172a",borderBottom:"1px solid #1e293b"}}>
-                  <span style={{fontWeight:600,color:"#cbd5e1",fontSize:13}}>{name}</span>
-                  {isAdmin&&(
-                    <div style={{display:"flex",gap:6}}>
-                      <button onClick={()=>addToGroup(section,grp==="A"?"B":"A",name)}
-                        style={{padding:"4px 8px",background:"#1e3a5f",border:"none",borderRadius:5,color:"#93c5fd",fontSize:11,cursor:"pointer"}}>
-                        → Group {grp==="A"?"B":"A"}
-                      </button>
-                      <button onClick={()=>removeFromGroup(section,grp,name)}
-                        style={{padding:"4px 8px",background:"#2d1515",border:"none",borderRadius:5,color:"#f87171",fontSize:11,cursor:"pointer"}}>
-                        Remove
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))
-            }
-          </div>
-        </div>
-      ))}
-
-      {/* Ungrouped */}
-      {ungrouped.length>0&&(
-        <div style={{marginBottom:20}}>
-          <div style={{fontSize:11,color:"#64748b",marginBottom:10,textTransform:"uppercase",letterSpacing:.5}}>Ungrouped ({ungrouped.length})</div>
-          <div style={{border:"1px solid #334155",borderRadius:8,overflow:"hidden"}}>
-            {ungrouped.map((name,i)=>(
-              <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",background:i%2===0?"#111827":"#0f172a",borderBottom:"1px solid #1e293b"}}>
-                <span style={{fontWeight:600,color:"#64748b",fontSize:13}}>{name}</span>
-                {isAdmin&&(
-                  <div style={{display:"flex",gap:6}}>
-                    {["A","B"].map(g=>(
-                      <button key={g} onClick={()=>addToGroup(section,g,name)}
-                        style={{padding:"4px 8px",background:"#1e3a5f",border:"none",borderRadius:5,color:"#93c5fd",fontSize:11,cursor:"pointer"}}>
-                        → Group {g}
-                      </button>
-                    ))}
-                    <button onClick={()=>removeTeam(section,name)}
-                      style={{padding:"4px 8px",background:"#2d1515",border:"none",borderRadius:5,color:"#f87171",fontSize:11,cursor:"pointer"}}>
-                      Remove
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Registered users reference */}
-      {isAdmin&&registeredUsers.length>0&&(
-        <div style={{marginTop:8,padding:"12px 14px",background:"#0a1020",borderRadius:8,border:"1px solid #1e293b"}}>
-          <div style={{fontSize:11,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>Registered Users ({registeredUsers.length})</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-            {registeredUsers.map(u=>(
-              <div key={u.email} style={{background:"#111827",border:"1px solid #1e293b",borderRadius:6,padding:"4px 10px",fontSize:12,color:"#94a3b8"}}>
-                {u.name||u.email?.split("@")[0]}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -1627,30 +1580,46 @@ export default function App() {
   const FUTURE      = futureDates();
   const defaultDate = FUTURE[0]||ALL_DATES[0];
 
+  const liveMatchRef = useRef(null); // track current live match id
+
   const load = useCallback(async (init=false) => {
     try {
       const r = await dbLoad();
       if (r) {
-        // Sanitize — Firebase can return objects instead of arrays
         const toArr = v => !v ? [] : Array.isArray(v) ? v : Object.values(v);
         const safe = {
           ...DEFAULT,
           ...r,
-          doubles:  toArr(r.doubles),
-          singles:  toArr(r.singles),
-          dMatches: toArr(r.dMatches),
-          sMatches: toArr(r.sMatches),
-          banter:   toArr(r.banter),
-          polls:    r.polls    || {},
-          tournPoll:r.tournPoll|| {doubles:{},singles:{}},
-          bets:     r.bets     || {},
-          betPoints:r.betPoints|| {},
-          users:    r.users    || {},
-          players:  r.players  || [],
-          doublesGroups: r.doublesGroups || {A:[],B:[]},
-          singlesGroups: r.singlesGroups || {A:[],B:[]},
+          doubles:   toArr(r.doubles),
+          singles:   toArr(r.singles),
+          dMatches:  toArr(r.dMatches),
+          sMatches:  toArr(r.sMatches),
+          banter:    toArr(r.banter),
+          polls:     r.polls     || {},
+          tournPoll: r.tournPoll || {doubles:{},singles:{}},
+          bets:      r.bets      || {},
+          betPoints: r.betPoints || {},
+          users:     r.users     || {},
+          withdrawn: r.withdrawn || [],
+          managers:  r.managers  || [ADMIN_EMAIL],
         };
-        setData(safe);
+        // If keeper is actively scoring, preserve local live state
+        // to prevent Firebase stale data from overwriting in-flight points
+        setData(prev => {
+          if (!prev || !liveMatchRef.current) return safe;
+          const {matchId, type, isKeeper} = liveMatchRef.current;
+          if (!isKeeper) return safe; // viewers always use Firebase data
+          // Keeper: keep local live state, update everything else
+          const key = type==="doubles"?"dMatches":"sMatches";
+          const localMatch = prev[key]?.find(m=>m.id===matchId);
+          if (!localMatch?.live) return safe;
+          return {
+            ...safe,
+            [key]: safe[key].map(m =>
+              m.id===matchId ? {...m, live: localMatch.live} : m
+            )
+          };
+        });
         if(init) setStatus("ok");
       } else if (init) {
         await dbSave(DEFAULT);
@@ -1682,18 +1651,31 @@ export default function App() {
     });
   },[load]);
 
-  // Poll every 5s when watching live
+  // Keep liveMatchRef in sync
+  useEffect(()=>{ liveMatchRef.current = liveMatch; },[liveMatch]);
+
+  // Poll every 5s for viewers only
   useEffect(()=>{
-    if (!liveMatch) return;
+    if (!liveMatch || liveMatch.isKeeper) return;
     const t = setInterval(()=>load(false), 5000);
     return ()=>clearInterval(t);
   },[liveMatch,load]);
+
+  // Debounced save — UI updates instantly, Firebase saves after 800ms of inactivity
+  const saveTimer = useRef(null);
+  const pendingSave = useRef(null);
 
   function upd(fn) {
     const nd=fn(data);
     setData(nd);
     setStatus("saving");
-    dbSave(nd).then(()=>setStatus("ok")).catch(()=>setStatus("error"));
+    pendingSave.current = nd;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(()=>{
+      dbSave(pendingSave.current)
+        .then(()=>setStatus("ok"))
+        .catch(()=>setStatus("error"));
+    }, 800);
     return nd;
   }
 
@@ -1706,11 +1688,13 @@ export default function App() {
   if(status==="loading") return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#64748b",fontSize:15}}>🎾 Loading…</div>;
   if(status==="error")   return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#ef4444",fontSize:15,padding:24,textAlign:"center"}}>❌ Could not load data. Check connection and refresh.</div>;
 
+  const managers = data.managers || [ADMIN_EMAIL];
+  const isManager = managers.includes(firebaseUser?.email?.toLowerCase());
   const isD     = lg==="doubles";
   const teams   = isD?data.doubles :data.singles;
   const avail   = isD?data.dAvail  :data.sAvail;
   const matches = isD?data.dMatches:data.sMatches;
-  const groups  = isD?(data.doublesGroups||{A:[],B:[]}):(data.singlesGroups||{A:[],B:[]});
+  const groups  = isD?GROUPS.doubles:GROUPS.singles;
   const standA  = calcGroupStandings(matches,groups.A);
   const standB  = calcGroupStandings(matches,groups.B);
   const pending = matches.filter(m=>!m.done);
@@ -1731,12 +1715,28 @@ export default function App() {
 
   function handlePoint(side) {
     const m = getCurrentLiveMatch(); if(!m) return;
-    const live = addPoint(m.live||newLive(), side);
+    const prevLive = m.live || newLive();
+    const live = addPoint(prevLive, side);
     const type = liveMatch.type;
-    upd(d=>{
+    // Update UI instantly
+    const nd = (d=>{
       const key=type==="doubles"?"dMatches":"sMatches";
       return {...d,[key]:d[key].map(x=>x.id===m.id?{...x,live}:x)};
-    });
+    })(data);
+    setData(nd);
+    pendingSave.current = nd;
+    clearTimeout(saveTimer.current);
+    // Save immediately on game/set win — these are critical state changes
+    const gameWon = live.sets.length > prevLive.sets.length ||
+                    live.games.a + live.games.b !== prevLive.games.a + prevLive.games.b ||
+                    live.isTiebreak !== prevLive.isTiebreak;
+    if (gameWon) {
+      dbSave(nd).catch(()=>{});
+    } else {
+      saveTimer.current = setTimeout(()=>{
+        dbSave(pendingSave.current).catch(()=>{});
+      }, 500);
+    }
   }
 
   function handleUndo() {
@@ -1797,6 +1797,35 @@ export default function App() {
   function removeTeam(name) {
     if(!window.confirm(`Remove "${name}"? Their matches will be kept.`)) return;
     upd(d=>isD?{...d,doubles:d.doubles.filter(t=>t!==name)}:{...d,singles:d.singles.filter(t=>t!==name)});
+  }
+
+  function withdrawTeam(name, isCurrentlyWD) {
+    if (isCurrentlyWD) {
+      // Reinstate — remove from withdrawn list
+      if (!window.confirm(`Reinstate "${name}"? Their walkovers will be reversed.`)) return;
+      upd(d=>({...d, withdrawn:(d.withdrawn||[]).filter(w=>w!==name)}));
+      return;
+    }
+    if (!window.confirm(`Withdraw "${name}"? All their pending matches will be awarded as walkovers to their opponents.`)) return;
+    upd(d=>{
+      const stamp = Date.now();
+      const newWithdrawn = [...(d.withdrawn||[]), name];
+      // Auto-complete all pending matches involving this team/player as walkovers
+      const walkover = (matches, key) => matches.map(m=>{
+        if (m.done) return m;
+        if (m.a!==name && m.b!==name) return m;
+        const winner = m.a===name ? m.b : m.a;
+        const sa = m.a===name ? "0-6 0-6" : "6-0 6-0";
+        const sb = m.a===name ? "6-0 6-0" : "0-6 0-6";
+        return {...m, sa, sb, done:true, completedAt:stamp, walkover:true};
+      });
+      return {
+        ...d,
+        withdrawn: newWithdrawn,
+        dMatches: walkover(d.dMatches, "d"),
+        sMatches: walkover(d.sMatches, "s"),
+      };
+    });
   }
 
   const statusColor={ok:"#10b981",saving:"#f59e0b",error:"#ef4444"}[status]||"#64748b";
@@ -2037,6 +2066,7 @@ export default function App() {
                     onDel={()=>delMatch(m.id)}
                     onGoLive={()=>{}}
                     onViewStats={m.matchStats?()=>setStatsMatch(m.id):null}
+                    canOverride={isManager}
                   />
                 ))}
               </div>
@@ -2049,8 +2079,8 @@ export default function App() {
           <div>
             <div style={{fontWeight:700,color:"#fff",marginBottom:20,fontSize:16}}>{isD?"Doubles":"Singles"} Points Table</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:24,marginBottom:36}}>
-              <GroupTable label="A" standings={standA}/>
-              <GroupTable label="B" standings={standB}/>
+              <GroupTable label="A" standings={standA} withdrawn={data.withdrawn||[]}/>
+              <GroupTable label="B" standings={standB} withdrawn={data.withdrawn||[]}/>
             </div>
             <div style={{background:"#0a1020",border:"1px solid #1e293b",borderRadius:12,padding:"20px 16px"}}>
               <KnockoutBracket standA={standA} standB={standB}/>
@@ -2074,7 +2104,59 @@ export default function App() {
 
         {/* MANAGE */}
         {tab==="manage"&&(
-          <ManageTab data={data} upd={upd} firebaseUser={firebaseUser}/>
+          <div>
+            <div style={{fontWeight:700,color:"#fff",fontSize:16,marginBottom:20}}>Manage Teams & Players</div>
+            <div style={{marginBottom:32}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <div style={{fontWeight:700,color:"#93c5fd",fontSize:14}}>👥 Doubles Teams ({data.doubles.length})</div>
+                <button style={pbtn} onClick={()=>{setLg("doubles");setModal("addteam");setMf({teamName:""});}}>+ Add Team</button>
+              </div>
+              <div style={{border:"1px solid #1e293b",borderRadius:8,overflow:"hidden"}}>
+                {data.doubles.map((name,i)=>{
+                  const isWD = (data.withdrawn||[]).includes(name);
+                  return (
+                    <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:isWD?"#1a0a0a":i%2===0?"#111827":"#0f172a",borderBottom:"1px solid #1e293b"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        {isWD&&<span style={{fontSize:10,background:"#7f1d1d",color:"#fca5a5",padding:"2px 6px",borderRadius:4,fontWeight:700}}>WD</span>}
+                        <span style={{fontWeight:600,color:isWD?"#64748b":"#cbd5e1",textDecoration:isWD?"line-through":"none"}}>{name}</span>
+                      </div>
+                      <div style={{display:"flex",gap:6}}>
+                        <button onClick={()=>withdrawTeam(name,isWD)} style={{padding:"4px 10px",background:isWD?"#1e3a5f":"#7f1d1d",border:"none",borderRadius:6,color:isWD?"#93c5fd":"#fca5a5",fontSize:11,cursor:"pointer"}}>
+                          {isWD?"Reinstate":"Withdraw"}
+                        </button>
+                        <button onClick={()=>{setLg("doubles");removeTeam(name);}} style={redbtn}>Remove</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <div style={{fontWeight:700,color:"#93c5fd",fontSize:14}}>👤 Singles Players ({data.singles.length})</div>
+                <button style={pbtn} onClick={()=>{setLg("singles");setModal("addteam");setMf({teamName:""});}}>+ Add Player</button>
+              </div>
+              <div style={{border:"1px solid #1e293b",borderRadius:8,overflow:"hidden"}}>
+                {data.singles.map((name,i)=>{
+                  const isWD = (data.withdrawn||[]).includes(name);
+                  return (
+                    <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px",background:isWD?"#1a0a0a":i%2===0?"#111827":"#0f172a",borderBottom:"1px solid #1e293b"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        {isWD&&<span style={{fontSize:10,background:"#7f1d1d",color:"#fca5a5",padding:"2px 6px",borderRadius:4,fontWeight:700}}>WD</span>}
+                        <span style={{fontWeight:600,color:isWD?"#64748b":"#cbd5e1",textDecoration:isWD?"line-through":"none"}}>{name}</span>
+                      </div>
+                      <div style={{display:"flex",gap:6}}>
+                        <button onClick={()=>withdrawTeam(name,isWD)} style={{padding:"4px 10px",background:isWD?"#1e3a5f":"#7f1d1d",border:"none",borderRadius:6,color:isWD?"#93c5fd":"#fca5a5",fontSize:11,cursor:"pointer"}}>
+                          {isWD?"Reinstate":"Withdraw"}
+                        </button>
+                        <button onClick={()=>{setLg("singles");removeTeam(name);}} style={redbtn}>Remove</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
