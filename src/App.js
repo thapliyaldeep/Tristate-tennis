@@ -61,16 +61,9 @@ const GROUPS = {
 const DEFAULT = {
   doubles:  ["Nitin/Ashish","Jai/Deep","Tarun/Sumit","Bobby/Satendra","Akash/Micky","Dhar/Vineet","Sanjay/Ravi","Shailesh/Uzair"],
   singles:  ["Ashish","Deep","Sumit","Bobby","Akash","Dhar","Sanjay","Pratyush","Viraj","Tushar"],
-  dAvail:   {
-    "Nitin/Ashish":  {"5/17":"4pm w Jai-Deep","5/18":"6pm avail","5/22":"5:30pm avail"},
-    "Jai/Deep":      {"5/17":"4pm w Nitin-Ashish"},
-    "Tarun/Sumit":   {"5/20":"5pm avail","5/21":"5pm avail"},
-    "Bobby/Satendra":{"5/18":"6pm w Akash-Micky"},
-    "Akash/Micky":   {"5/18":"6pm w Bobby-Satu"},
-    "Dhar/Vineet":   {"5/19":"6pm onwards"},
-    "Sanjay/Ravi":   {"5/16":"5pm avail","5/17":"Anytime","5/20":"6pm avail","5/21":"6pm avail"},
-  },
-  sAvail:   {"Dhar":{"5/15":"5pm+","5/16":"8-10am"},"Viraj":{"5/15":"5pm+"}},
+  dAvail:   {},
+  sAvail:   {},
+  availability: {}, // {playerName: [{date, time, note}]}
   dMatches: [], sMatches: [], did:1, sid:1, banter: [], polls: {}, tournPoll: {doubles:{}, singles:{}}, bets: {}, betPoints: {}, withdrawn: [], managers: ["deepcolour@gmail.com"],
 };
 
@@ -1562,6 +1555,320 @@ function CompletedMatchStats({m, onClose}) {
   );
 }
 
+
+// ─── Schedule Tab ─────────────────────────────────────────────────────────────
+function ScheduleTab({data, upd, firebaseUser, isManager, teams, isD, defaultDate, onScheduleMatch}) {
+  const myName = firebaseUser?.displayName || firebaseUser?.email?.split("@")[0] || "";
+  const availability = data.availability || {};
+  const [showMyAvail, setShowMyAvail] = useState(false);
+  const [newDate, setNewDate]   = useState(defaultDate);
+  const [newTime, setNewTime]   = useState("");
+  const [newNote, setNewNote]   = useState("");
+
+  // Find which team/player this user belongs to
+  const myTeams = teams.filter(t => t.split("/").some(n =>
+    n.toLowerCase() === myName.toLowerCase()
+  ));
+  const myKey = myTeams[0] || myName;
+
+  const mySlots = availability[myKey] || [];
+  const FUTURE = futureDates();
+
+  async function addSlot() {
+    if (!newDate || !newTime) return;
+    const slot = {date:newDate, time:newTime, note:newNote, ts:Date.now()};
+    upd(d=>({...d, availability:{...d.availability,
+      [myKey]: [...(d.availability[myKey]||[]), slot]
+        .sort((a,b)=>ALL_DATES.indexOf(a.date)-ALL_DATES.indexOf(b.date))
+    }}));
+    setNewTime(""); setNewNote("");
+  }
+
+  async function removeSlot(idx) {
+    upd(d=>({...d, availability:{...d.availability,
+      [myKey]: (d.availability[myKey]||[]).filter((_,i)=>i!==idx)
+    }}));
+  }
+
+  // Get common slots between two teams
+  function getCommonSlots(teamA, teamB) {
+    const slotsA = availability[teamA] || [];
+    const slotsB = availability[teamB] || [];
+    // Find dates that appear in both
+    const datesB = new Set(slotsB.map(s=>s.date));
+    return slotsA
+      .filter(s=>datesB.has(s.date))
+      .map(s=>{
+        const matchB = slotsB.filter(b=>b.date===s.date);
+        return {
+          date: s.date,
+          timeA: s.time,
+          noteA: s.note,
+          timesB: matchB.map(b=>b.time).join(", "),
+          label: `${s.date} · ${s.time}${s.note?` (${s.note})`:""} ↔ ${matchB.map(b=>b.time).join(", ")}`,
+        };
+      });
+  }
+
+  const matches  = isD?data.dMatches:data.sMatches;
+  const pending  = matches.filter(m=>!m.done);
+  const complete = matches.filter(m=>m.done);
+
+  return (
+    <div>
+      {/* My Availability */}
+      <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:"16px",marginBottom:20}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:showMyAvail?16:0}}>
+          <div>
+            <div style={{fontWeight:700,color:"#fff",fontSize:14}}>📅 My Availability</div>
+            <div style={{fontSize:11,color:"#64748b",marginTop:2}}>Playing as: <span style={{color:"#93c5fd"}}>{myKey||"Unknown"}</span></div>
+          </div>
+          <button onClick={()=>setShowMyAvail(v=>!v)}
+            style={{padding:"6px 14px",background:"#1e293b",border:"1px solid #334155",borderRadius:7,color:"#93c5fd",fontSize:12,cursor:"pointer"}}>
+            {showMyAvail?"Hide":"Manage ▼"}
+          </button>
+        </div>
+
+        {showMyAvail&&(
+          <div>
+            {/* Add new slot */}
+            <div style={{background:"#0f172a",borderRadius:8,padding:"12px",marginBottom:16}}>
+              <div style={{fontSize:12,color:"#64748b",marginBottom:10,fontWeight:600}}>Add available slot:</div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end"}}>
+                <div>
+                  <div style={{fontSize:10,color:"#64748b",marginBottom:4}}>DATE</div>
+                  <select value={newDate} onChange={e=>setNewDate(e.target.value)}
+                    style={{padding:"8px 10px",background:"#1e293b",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:12,outline:"none"}}>
+                    {FUTURE.map((d,i)=>{
+                      const gi=ALL_DATES.indexOf(d);
+                      return <option key={d} value={d}>{d} ({ALL_DAYS[gi]})</option>;
+                    })}
+                  </select>
+                </div>
+                <div>
+                  <div style={{fontSize:10,color:"#64748b",marginBottom:4}}>TIME</div>
+                  <input value={newTime} onChange={e=>setNewTime(e.target.value)}
+                    placeholder="e.g. 6pm"
+                    style={{padding:"8px 10px",background:"#1e293b",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:12,outline:"none",width:90}}/>
+                </div>
+                <div>
+                  <div style={{fontSize:10,color:"#64748b",marginBottom:4}}>NOTE (optional)</div>
+                  <input value={newNote} onChange={e=>setNewNote(e.target.value)}
+                    placeholder="e.g. after 5pm"
+                    style={{padding:"8px 10px",background:"#1e293b",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:12,outline:"none",width:120}}/>
+                </div>
+                <button onClick={addSlot} disabled={!newTime}
+                  style={{padding:"8px 16px",background:"#3b82f6",border:"none",borderRadius:7,color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer",opacity:newTime?1:.4}}>
+                  + Add
+                </button>
+              </div>
+            </div>
+
+            {/* My slots */}
+            {mySlots.length===0
+              ?<div style={{color:"#64748b",fontSize:13,textAlign:"center",padding:"16px 0"}}>No availability added yet</div>
+              :<div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                {mySlots.map((s,i)=>(
+                  <div key={i} style={{background:"#1e3a5f",border:"1px solid #3b82f655",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
+                    <div>
+                      <span style={{color:"#93c5fd",fontWeight:700,fontSize:13}}>{s.date}</span>
+                      <span style={{color:"#e2e8f0",fontSize:13",marginLeft:6}}> {s.time}</span>
+                      {s.note&&<span style={{color:"#64748b",fontSize:11,marginLeft:4}}>· {s.note}</span>}
+                    </div>
+                    <button onClick={()=>removeSlot(i)}
+                      style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",fontSize:14,padding:0,lineHeight:1}}>×</button>
+                  </div>
+                ))}
+              </div>
+            }
+          </div>
+        )}
+      </div>
+
+      {/* Schedule a match */}
+      {isManager&&(
+        <ScheduleMatchPanel
+          teams={teams} isD={isD} availability={availability}
+          defaultDate={defaultDate} getCommonSlots={getCommonSlots}
+          onSchedule={onScheduleMatch}
+        />
+      )}
+
+      {/* Upcoming matches */}
+      {pending.length>0&&(
+        <div style={{marginBottom:24}}>
+          <div style={{fontSize:11,color:"#64748b",marginBottom:10,textTransform:"uppercase",letterSpacing:.5}}>Upcoming Matches</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:8}}>
+            {pending.map(m=>(
+              <div key={m.id} style={{background:m.live?"#1a0a0a":"#0a1e3a",border:`1px solid ${m.live?"#ef444466":"#1e3a6e"}`,borderRadius:8,padding:"12px"}}>
+                {m.live&&<div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>
+                  <div style={{width:6,height:6,borderRadius:"50%",background:"#ef4444",animation:"pulse 1s infinite"}}/>
+                  <span style={{color:"#ef4444",fontSize:10,fontWeight:700}}>LIVE</span>
+                </div>}
+                <div style={{fontWeight:700,color:m.live?"#fca5a5":"#93c5fd",fontSize:13}}>{m.a}</div>
+                <div style={{fontSize:11,color:"#64748b"}}>vs {m.b}</div>
+                <div style={{color:"#64748b",fontSize:11,marginTop:5}}>
+                  {m.date}{m.time?` · ${m.time}`:""}{m.venue?` · 📍${m.venue}`:""}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Completed matches */}
+      {complete.length>0&&(
+        <div>
+          <div style={{fontSize:11,color:"#64748b",marginBottom:10,textTransform:"uppercase",letterSpacing:.5}}>Completed</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:8}}>
+            {complete.map(m=>{
+              const wa=calcWins(m.sa),wb=calcWins(m.sb);
+              const winner=wa&&wb?(wa.w>wb.w?m.a:m.b):null;
+              return(
+                <div key={m.id} style={{background:"#061a0e",border:"1px solid #14532d",borderRadius:8,padding:"12px"}}>
+                  <div style={{fontWeight:700,color:winner===m.a?"#34d399":"#cbd5e1",fontSize:13}}>{m.a} {winner===m.a&&"🏆"}</div>
+                  <div style={{fontSize:11,color:"#64748b"}}>vs</div>
+                  <div style={{fontWeight:700,color:winner===m.b?"#34d399":"#cbd5e1",fontSize:13}}>{m.b} {winner===m.b&&"🏆"}</div>
+                  <div style={{color:"#10b981",fontSize:11,marginTop:5,fontWeight:600}}>{m.sa} / {m.sb}</div>
+                  <div style={{color:"#64748b",fontSize:10,marginTop:3}}>{m.date}{m.time?` · ${m.time}`:""}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScheduleMatchPanel({teams, isD, availability, defaultDate, getCommonSlots, onSchedule}) {
+  const [teamA, setTeamA]   = useState("");
+  const [teamB, setTeamB]   = useState("");
+  const [slot,  setSlot]    = useState("");
+  const [venue, setVenue]   = useState("");
+  const [manualDate, setManualDate] = useState(defaultDate);
+  const [manualTime, setManualTime] = useState("");
+  const [useManual, setUseManual]   = useState(false);
+
+  const commonSlots = teamA && teamB ? getCommonSlots(teamA, teamB) : [];
+  const allSlotsA   = teamA ? (availability[teamA]||[]) : [];
+  const allSlotsB   = teamB ? (availability[teamB]||[]) : [];
+
+  function handleSchedule() {
+    let date = defaultDate, time = "";
+    if (!useManual && slot) {
+      const s = commonSlots[parseInt(slot)];
+      if (s) { date=s.date; time=s.timeA; }
+    } else {
+      date = manualDate; time = manualTime;
+    }
+    onSchedule({a:teamA, b:teamB, date, time, venue});
+  }
+
+  return (
+    <div style={{background:"#0e1320",border:"1px solid #1e293b",borderRadius:12,padding:"16px",marginBottom:20}}>
+      <div style={{fontWeight:700,color:"#fff",fontSize:14,marginBottom:16}}>📋 Schedule a Match</div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+        <div>
+          <div style={{fontSize:10,color:"#64748b",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>{isD?"Team 1":"Player 1"}</div>
+          <select value={teamA} onChange={e=>{setTeamA(e.target.value);setSlot("");}}
+            style={{width:"100%",padding:"9px 10px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:13,outline:"none"}}>
+            <option value="">Select…</option>
+            {teams.map(t=><option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div>
+          <div style={{fontSize:10,color:"#64748b",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>{isD?"Team 2":"Player 2"}</div>
+          <select value={teamB} onChange={e=>{setTeamB(e.target.value);setSlot("");}}
+            style={{width:"100%",padding:"9px 10px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:13,outline:"none"}}>
+            <option value="">Select…</option>
+            {teams.filter(t=>t!==teamA).map(t=><option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Common slots */}
+      {teamA&&teamB&&(
+        <div style={{marginBottom:12}}>
+          {commonSlots.length>0?(
+            <div>
+              <div style={{fontSize:11,color:"#10b981",marginBottom:8}}>✓ {commonSlots.length} common slot{commonSlots.length!==1?"s":""} found</div>
+              <select value={slot} onChange={e=>{setSlot(e.target.value);setUseManual(false);}}
+                style={{width:"100%",padding:"9px 10px",background:"#064e3b",border:"1px solid #10b98155",borderRadius:7,color:"#e2e8f0",fontSize:13,outline:"none",marginBottom:8}}>
+                <option value="">Pick a common slot…</option>
+                {commonSlots.map((s,i)=>(
+                  <option key={i} value={i}>{s.date} · {s.timeA} ({teamA.split("/")[0]}) ↔ {s.timesB} ({teamB.split("/")[0]})</option>
+                ))}
+              </select>
+            </div>
+          ):(
+            <div style={{fontSize:12,color:"#f59e0b",marginBottom:8}}>
+              ⚠️ No common slots found.
+              {allSlotsA.length===0&&<span> {teamA.split("/")[0]} hasn't set availability.</span>}
+              {allSlotsB.length===0&&<span> {teamB.split("/")[0]} hasn't set availability.</span>}
+            </div>
+          )}
+
+          {/* All slots for reference */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+            {[{name:teamA,slots:allSlotsA},{name:teamB,slots:allSlotsB}].map(({name,slots})=>(
+              <div key={name} style={{background:"#0f172a",borderRadius:6,padding:"8px 10px"}}>
+                <div style={{fontSize:11,color:"#93c5fd",fontWeight:600,marginBottom:4}}>{name.split("/")[0]}</div>
+                {slots.length===0
+                  ?<div style={{fontSize:11,color:"#475569"}}>No availability set</div>
+                  :slots.slice(0,4).map((s,i)=>(
+                    <div key={i} style={{fontSize:11,color:"#64748b"}}>{s.date} · {s.time}{s.note?` (${s.note})`:""}</div>
+                  ))
+                }
+                {slots.length>4&&<div style={{fontSize:10,color:"#475569"}}>+{slots.length-4} more</div>}
+              </div>
+            ))}
+          </div>
+
+          {/* Manual override */}
+          <button onClick={()=>setUseManual(v=>!v)}
+            style={{background:"none",border:"none",color:"#64748b",fontSize:11,cursor:"pointer",textDecoration:"underline"}}>
+            {useManual?"Use common slot instead":"Pick date/time manually instead"}
+          </button>
+        </div>
+      )}
+
+      {/* Manual date/time */}
+      {(useManual||(!teamA||!teamB))&&(
+        <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:120}}>
+            <div style={{fontSize:10,color:"#64748b",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>Date</div>
+            <select value={manualDate} onChange={e=>setManualDate(e.target.value)}
+              style={{width:"100%",padding:"8px 10px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:12,outline:"none"}}>
+              {ALL_DATES.map((d,i)=><option key={d} value={d}>{d} ({ALL_DAYS[i]})</option>)}
+            </select>
+          </div>
+          <div style={{flex:1,minWidth:100}}>
+            <div style={{fontSize:10,color:"#64748b",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>Time</div>
+            <input value={manualTime} onChange={e=>setManualTime(e.target.value)}
+              placeholder="e.g. 6pm"
+              style={{width:"100%",padding:"8px 10px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:12,outline:"none"}}/>
+          </div>
+        </div>
+      )}
+
+      {/* Venue */}
+      <div style={{marginBottom:14}}>
+        <div style={{fontSize:10,color:"#64748b",marginBottom:4,textTransform:"uppercase",letterSpacing:.5}}>Venue (optional)</div>
+        <input value={venue} onChange={e=>setVenue(e.target.value)}
+          placeholder="e.g. JFK Tennis Courts"
+          style={{width:"100%",padding:"8px 10px",background:"#0f172a",border:"1px solid #334155",borderRadius:7,color:"#e2e8f0",fontSize:12,outline:"none"}}/>
+      </div>
+
+      <button onClick={handleSchedule} disabled={!teamA||!teamB}
+        style={{width:"100%",padding:"11px",background:"#3b82f6",border:"none",borderRadius:8,color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer",opacity:teamA&&teamB?1:.4}}>
+        Schedule Match
+      </button>
+    </div>
+  );
+}
+
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const { user: firebaseUser, approved, checking } = useAuth();
@@ -1600,6 +1907,7 @@ export default function App() {
           bets:      r.bets      || {},
           betPoints: r.betPoints || {},
           users:     r.users     || {},
+          availability: r.availability || {},
           withdrawn: r.withdrawn || [],
           managers:  r.managers  || [ADMIN_EMAIL],
         };
@@ -1771,6 +2079,8 @@ export default function App() {
       return isD?{...d,dMatches:[...d.dMatches,m],did:d.did+1}:{...d,sMatches:[...d.sMatches,m],sid:d.sid+1};
     }); setModal(null);
   }
+
+  async function addAvail() { setModal(null); } // legacy no-op
   async function delMatch(id) {
     await upd(d=>isD?{...d,dMatches:d.dMatches.filter(m=>m.id!==id)}:{...d,sMatches:d.sMatches.filter(m=>m.id!==id)});
   }
@@ -1951,87 +2261,14 @@ export default function App() {
 
         {/* SCHEDULE */}
         {tab==="schedule"&&(
-          <div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-              <div style={{fontWeight:700,color:"#fff"}}>Availability Grid</div>
-              <button style={pbtn} onClick={()=>{setModal("match");setMf({a:"",b:"",date:defaultDate,time:""});}}>+ Schedule Match</button>
-            </div>
-            {matches.length>0&&(
-              <div style={{marginBottom:20}}>
-                {pending.length>0&&(
-                  <>
-                    <div style={{fontSize:11,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>Upcoming Matches</div>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))",gap:8,marginBottom:16}}>
-                      {pending.map(m=>(
-                        <div key={m.id} style={{background:m.live?"#1a0a0a":"#0a1e3a",border:`1px solid ${m.live?"#ef444466":"#1e3a6e"}`,borderRadius:8,padding:"10px 12px"}}>
-                          {m.live&&<div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}><div style={{width:6,height:6,borderRadius:"50%",background:"#ef4444",animation:"pulse 1s infinite"}}/><span style={{color:"#ef4444",fontSize:10,fontWeight:700}}>LIVE</span></div>}
-                          <div style={{fontWeight:700,color:m.live?"#fca5a5":"#93c5fd",fontSize:13}}>{m.a}</div>
-                          <div style={{fontSize:11,color:"#64748b"}}>vs {m.b}</div>
-                          <div style={{color:"#64748b",fontSize:11,marginTop:5}}>{m.date}{m.time?` · ${m.time}`:""}{m.venue?` · 📍${m.venue}`:""}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-                {complete.length>0&&(
-                  <>
-                    <div style={{fontSize:11,color:"#64748b",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>Completed Matches</div>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))",gap:8}}>
-                      {complete.map(m=>{
-                        const wa=calcWins(m.sa),wb=calcWins(m.sb);
-                        const winner=wa&&wb?(wa.w>wb.w?m.a:m.b):null;
-                        return(
-                          <div key={m.id} style={{background:"#061a0e",border:"1px solid #14532d",borderRadius:8,padding:"10px 12px"}}>
-                            <div style={{fontWeight:700,color:winner===m.a?"#34d399":"#cbd5e1",fontSize:13}}>{m.a} {winner===m.a&&"🏆"}</div>
-                            <div style={{fontSize:11,color:"#64748b"}}>vs</div>
-                            <div style={{fontWeight:700,color:winner===m.b?"#34d399":"#cbd5e1",fontSize:13}}>{m.b} {winner===m.b&&"🏆"}</div>
-                            <div style={{color:"#10b981",fontSize:11,marginTop:5,fontWeight:600}}>{m.sa} / {m.sb}</div>
-                            <div style={{color:"#64748b",fontSize:10,marginTop:3}}>{m.date}{m.time?` · ${m.time}`:""}{m.venue?` · 📍${m.venue}`:""}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-            <div style={{overflowX:"auto",border:"1px solid #1e293b",borderRadius:8}}>
-              <table style={{borderCollapse:"collapse",minWidth:700,width:"100%"}}>
-                <thead>
-                  <tr style={{background:"#0a1020"}}>
-                    <th style={{padding:"9px 12px",textAlign:"left",color:"#64748b",fontSize:11,fontWeight:600,textTransform:"uppercase",borderBottom:"1px solid #1e293b",whiteSpace:"nowrap",position:"sticky",left:0,zIndex:2,background:"#0a1020"}}>{isD?"Team":"Player"}</th>
-                    {ALL_DATES.map((d,i)=>(
-                      <th key={d} style={{padding:"9px 4px",color:"#64748b",fontSize:11,fontWeight:600,borderBottom:"1px solid #1e293b",textAlign:"center",minWidth:64}}>
-                        <div style={{color:"#93c5fd"}}>{d}</div>
-                        <div>{ALL_DAYS[i]}</div>
-                      </th>
-                    ))}
-                    <th style={{padding:"9px 4px",borderBottom:"1px solid #1e293b",width:36,position:"sticky",right:0,background:"#0a1020"}}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {teams.map((name,ri)=>(
-                    <tr key={name} style={{background:ri%2===0?"#111827":"#0f172a"}}>
-                      <td style={{padding:"8px 12px",fontWeight:700,color:"#cbd5e1",fontSize:13,borderBottom:"1px solid #1e293b",whiteSpace:"nowrap",position:"sticky",left:0,zIndex:1,background:ri%2===0?"#111827":"#0f172a"}}>{name}</td>
-                      {ALL_DATES.map(d=>{
-                        const note=avail[name]?.[d];
-                        const booked=note&&/w /i.test(note);
-                        return(
-                          <td key={d} style={{padding:"3px 3px",borderBottom:"1px solid #1e293b",verticalAlign:"top"}}>
-                            {note?<div onClick={()=>removeAvail(name,d)} title="Click to remove" style={{background:booked?"#064e3b":"#1e3a5f",border:`1px solid ${booked?"#10b98155":"#3b82f655"}`,borderRadius:5,padding:"3px 5px",color:booked?"#10b981":"#93c5fd",fontSize:10,cursor:"pointer",lineHeight:1.4}}>{note}</div>:<div style={{height:22}}/>}
-                          </td>
-                        );
-                      })}
-                      <td style={{padding:"3px 4px",borderBottom:"1px solid #1e293b",textAlign:"center",position:"sticky",right:0,background:ri%2===0?"#111827":"#0f172a"}}>
-                        <button onClick={()=>{setModal("avail");setMf({name,date:defaultDate,note:""}); }} style={{background:"none",border:"1px solid #334155",borderRadius:5,color:"#64748b",cursor:"pointer",padding:"2px 7px",fontSize:14,lineHeight:1.5}}>+</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div style={{marginTop:8,fontSize:11,color:"#64748b"}}>🟢 Green = match booked · 🔵 Blue = available · Click any cell to remove it</div>
-          </div>
+          <ScheduleTab
+            data={data} upd={upd}
+            firebaseUser={firebaseUser}
+            isManager={isManager}
+            teams={teams} isD={isD}
+            defaultDate={defaultDate}
+            onScheduleMatch={(mf)=>{setModal("match");setMf(mf);}}
+          />
         )}
 
         {/* SCORES */}
