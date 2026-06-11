@@ -1672,7 +1672,7 @@ function ScheduleTab({data, upd, firebaseUser, isManager, teams, isD, defaultDat
                   <div key={i} style={{background:"#1e3a5f",border:"1px solid #3b82f655",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
                     <div>
                       <span style={{color:"#93c5fd",fontWeight:700,fontSize:13}}>{s.date}</span>
-                      <span style={{color:"#e2e8f0",fontSize:13",marginLeft:6}}> {s.time}</span>
+                      <span style={{color:"#e2e8f0",fontSize:13,marginLeft:6}}> {s.time}</span>
                       {s.note&&<span style={{color:"#64748b",fontSize:11,marginLeft:4}}>· {s.note}</span>}
                     </div>
                     <button onClick={()=>removeSlot(i)}
