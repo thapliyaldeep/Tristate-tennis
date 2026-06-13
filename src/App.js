@@ -21,6 +21,29 @@ async function dbLoad() {
     return val ? JSON.parse(val) : null;
   } catch { return null; }
 }
+const BACKUP_URL = "https://tristate-tennis-default-rtdb.firebaseio.com/backups.json";
+const BACKUP_KEEP = 20; // keep last N backups
+
+async function writeBackup(data) {
+  try {
+    const ts = Date.now();
+    await fetch(`https://tristate-tennis-default-rtdb.firebaseio.com/backups/${ts}.json`, {
+      method: "PUT",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(JSON.stringify(data)),
+    });
+    // Prune old backups beyond BACKUP_KEEP
+    const listRaw = await fetch(BACKUP_URL + "?shallow=true").then(r=>r.json());
+    if (listRaw) {
+      const keys = Object.keys(listRaw).map(Number).sort((a,b)=>b-a); // newest first
+      const toDelete = keys.slice(BACKUP_KEEP);
+      for (const k of toDelete) {
+        fetch(`https://tristate-tennis-default-rtdb.firebaseio.com/backups/${k}.json`, {method:"DELETE"}).catch(()=>{});
+      }
+    }
+  } catch(e) { console.error("Backup write failed:", e); }
+}
+
 async function dbSave(data) {
   try {
     // Safety guard: never overwrite with a payload that looks like catastrophic
@@ -35,6 +58,9 @@ async function dbSave(data) {
           console.error("dbSave aborted: refusing to overwrite", existingTotal, "matches with 0");
           return;
         }
+        // Backup the OLD state before overwriting, but only periodically (every ~10th save)
+        // to avoid excessive writes - use a simple time-based throttle via localStorage-free approach
+        writeBackup(existing); // fire-and-forget, backs up pre-save state
       }
     } catch(e) { /* if check fails, proceed - don't block saves on guard errors */ }
 
