@@ -2385,7 +2385,20 @@ export default function App() {
         {/* MANAGE */}
         {tab==="manage"&&(
           <div>
-            <div style={{fontWeight:700,color:"#fff",fontSize:16,marginBottom:20}}>Manage Teams & Players</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+              <div style={{fontWeight:700,color:"#fff",fontSize:16}}>Manage Teams & Players</div>
+              <button onClick={()=>{
+                const blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json"});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `tristate-backup-${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }} style={{padding:"8px 14px",background:"#1e293b",border:"1px solid #334155",borderRadius:7,color:"#93c5fd",fontSize:12,cursor:"pointer",fontWeight:600}}>
+                ⬇️ Export Backup
+              </button>
+            </div>
             <div style={{marginBottom:32}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                 <div style={{fontWeight:700,color:"#93c5fd",fontSize:14}}>👥 Doubles Teams ({data.doubles.length})</div>
