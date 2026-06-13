@@ -999,11 +999,26 @@ function GroupTable({label,standings,withdrawn=[]}) {
   );
 }
 
-function KnockoutBracket({standA,standB}) {
+function findMatchWinner(matches, nameA, nameB) {
+  // Find a completed match between nameA and nameB (in either order), return winner's name
+  const m = matches.find(m => m.done && ((m.a===nameA && m.b===nameB) || (m.a===nameB && m.b===nameA)));
+  if (!m || !m.sa || !m.sb) return null;
+  const aSets = m.sa.split(" "), bSets = m.sb.split(" ");
+  let wa=0, wb=0;
+  for (let i=0;i<aSets.length;i++) {
+    const [ga,gb] = aSets[i].split("-").map(Number);
+    if (ga>gb) wa++; else wb++;
+  }
+  return wa>wb ? m.a : m.b;
+}
+
+function KnockoutBracket({standA,standB,matches}) {
   const sf1a=standA[0]?.n||"1st Group A", sf1b=standB[1]?.n||"2nd Group B";
   const sf2a=standB[0]?.n||"1st Group B", sf2b=standA[1]?.n||"2nd Group A";
   const box=(filled,label)=>(<div style={{background:filled?"#0a1e3a":"#111827",border:`1px solid ${filled?"#3b82f6":"#334155"}`,borderRadius:8,padding:"10px 14px",color:filled?"#93c5fd":"#475569",fontWeight:700,fontSize:13,minWidth:140,textAlign:"center"}}>{label}</div>);
   const vs=<div style={{color:"#475569",fontSize:11,fontWeight:700,textAlign:"center",margin:"4px 0"}}>vs</div>;
+  const sf1Winner = (standA[0] && standB[1]) ? findMatchWinner(matches||[], sf1a, sf1b) : null;
+  const sf2Winner = (standB[0] && standA[1]) ? findMatchWinner(matches||[], sf2a, sf2b) : null;
   return (
     <div style={{marginTop:8}}>
       <div style={{fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:16}}>Knockout Stage</div>
@@ -1015,7 +1030,7 @@ function KnockoutBracket({standA,standB}) {
         <div style={{width:60,height:1,background:"#334155",marginTop:28}}/>
         <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:160}}>
           <div style={{fontSize:11,color:"#FFD700",fontWeight:800,marginBottom:6,letterSpacing:1}}>🏆 FINAL</div>
-          {box(false,"Winner SF1")}{vs}{box(false,"Winner SF2")}
+          {box(!!sf1Winner,sf1Winner||"Winner SF1")}{vs}{box(!!sf2Winner,sf2Winner||"Winner SF2")}
         </div>
         <div style={{width:60,height:1,background:"#334155",marginTop:28}}/>
         <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:160}}>
@@ -2363,7 +2378,7 @@ export default function App() {
               <GroupTable label="B" standings={standB} withdrawn={data.withdrawn||[]}/>
             </div>
             <div style={{background:"#0a1020",border:"1px solid #1e293b",borderRadius:12,padding:"20px 16px"}}>
-              <KnockoutBracket standA={standA} standB={standB}/>
+              <KnockoutBracket standA={standA} standB={standB} matches={matches}/>
             </div>
           </div>
         )}
