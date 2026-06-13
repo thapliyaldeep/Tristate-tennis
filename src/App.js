@@ -23,6 +23,21 @@ async function dbLoad() {
 }
 async function dbSave(data) {
   try {
+    // Safety guard: never overwrite with a payload that looks like catastrophic
+    // data loss (existing matches present remotely, but none in this payload)
+    try {
+      const existingRaw = await fetch(FB_URL).then(r=>r.json());
+      if (existingRaw) {
+        const existing = JSON.parse(existingRaw);
+        const existingTotal = (existing.dMatches?.length||0) + (existing.sMatches?.length||0);
+        const newTotal = (data.dMatches?.length||0) + (data.sMatches?.length||0);
+        if (existingTotal >= 5 && newTotal === 0) {
+          console.error("dbSave aborted: refusing to overwrite", existingTotal, "matches with 0");
+          return;
+        }
+      }
+    } catch(e) { /* if check fails, proceed - don't block saves on guard errors */ }
+
     await fetch(FB_URL, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -1861,7 +1876,8 @@ export default function App() {
   const pendingSave = useRef(null);
 
   function upd(fn) {
-    const nd=fn(data);
+    const base = pendingSave.current || data;
+    const nd=fn(base);
     setData(nd);
     setStatus("saving");
     pendingSave.current = nd;
@@ -1913,11 +1929,12 @@ export default function App() {
     const prevLive = m.live || newLive();
     const live = addPoint(prevLive, side);
     const type = liveMatch.type;
-    // Update UI instantly
+    // Update UI instantly - build from latest pending state, not stale render data
+    const base = pendingSave.current || data;
     const nd = (d=>{
       const key=type==="doubles"?"dMatches":"sMatches";
       return {...d,[key]:d[key].map(x=>x.id===m.id?{...x,live}:x)};
-    })(data);
+    })(base);
     setData(nd);
     pendingSave.current = nd;
     clearTimeout(saveTimer.current);
