@@ -2342,7 +2342,22 @@ export default function App() {
 
         {/* MANAGE */}
         {tab==="manage"&&isManager&&(
-          <ManageTab data={data} upd={upd} firebaseUser={firebaseUser}/>
+          <div>
+            <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
+              <button onClick={()=>{
+                const blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json"});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `tristate-backup-${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }} style={{padding:"8px 14px",background:"#1e293b",border:"1px solid #334155",borderRadius:7,color:"#93c5fd",fontSize:12,cursor:"pointer",fontWeight:600}}>
+                ⬇️ Export Backup
+              </button>
+            </div>
+            <ManageTab data={data} upd={upd} firebaseUser={firebaseUser}/>
+          </div>
         )}
       </div>
 
