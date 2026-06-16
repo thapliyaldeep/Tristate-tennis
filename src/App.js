@@ -2038,6 +2038,8 @@ export default function App() {
     pendingSave.current = nd;
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(()=>{
+      const lm = liveMatchRef.current;
+      if (lm && lm.isKeeper === false) { console.warn("upd: watcher tab blocked from saving"); setStatus("ok"); return; }
       dbSave(pendingSave.current)
         .then(()=>setStatus("ok"))
         .catch(()=>setStatus("error"));
