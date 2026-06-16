@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth, LoginPage, PendingApproval, AdminPanel, signOut, auth } from "./Auth";
 
+const MAINTENANCE_URL = "https://tristate-tennis-default-rtdb.firebaseio.com/maintenance.json";
 const FB_URL = "https://tristate-tennis-default-rtdb.firebaseio.com/state.json";
 
 // Stable device ID — set once at module load, persists in localStorage
@@ -2052,6 +2053,7 @@ export default function App() {
 
   if(status==="loading") return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#64748b",fontSize:15}}>🎾 Loading…</div>;
   if(status==="error")   return <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#ef4444",fontSize:15,padding:24,textAlign:"center"}}>❌ Could not load data. Check connection and refresh.</div>;
+  if(data.maintenance && !isManager) return <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",background:"#0f172a",color:"#e2e8f0",fontFamily:"system-ui,sans-serif",padding:24,textAlign:"center"}}><div style={{fontSize:40,marginBottom:16}}>🎾</div><div style={{fontWeight:800,fontSize:20,marginBottom:8}}>Tristate Tennis 2026</div><div style={{color:"#64748b",fontSize:15,maxWidth:320}}>{typeof data.maintenance==="string"?data.maintenance:"App is under maintenance. Check back soon!"}</div></div>;
 
   const managers = data.managers || [ADMIN_EMAIL];
   const isManager = managers.includes(firebaseUser?.email?.toLowerCase());
