@@ -55,8 +55,8 @@ async function dbSave(data) {
         const existing = JSON.parse(existingRaw);
         const existingTotal = (existing.dMatches?.length||0) + (existing.sMatches?.length||0);
         const newTotal = (data.dMatches?.length||0) + (data.sMatches?.length||0);
-        if (existingTotal >= 5 && newTotal === 0) {
-          console.error("dbSave aborted: refusing to overwrite", existingTotal, "matches with 0");
+        if (existingTotal >= 5 && newTotal < existingTotal - 2) {
+          console.error("dbSave aborted: refusing to overwrite", existingTotal, "matches with", newTotal);
           return;
         }
         // Backup the OLD state before overwriting, but only periodically (every ~10th save)
