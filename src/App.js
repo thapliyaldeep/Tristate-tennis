@@ -61,7 +61,7 @@ async function dbSave(data) {
         }
         // Backup the OLD state before overwriting, but only periodically (every ~10th save)
         // to avoid excessive writes - use a simple time-based throttle via localStorage-free approach
-        writeBackup(existing); // fire-and-forget, backs up pre-save state
+        // writeBackup disabled - use manual Export Backup button instead
       }
     } catch(e) { /* if check fails, proceed - don't block saves on guard errors */ }
 
