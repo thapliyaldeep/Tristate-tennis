@@ -1020,8 +1020,17 @@ function KnockoutBracket({standA,standB,matches}) {
   const vs=<div style={{color:"#475569",fontSize:11,fontWeight:700,textAlign:"center",margin:"4px 0"}}>vs</div>;
   const sf1Winner = (standA[0] && standB[1]) ? findMatchWinner(matches||[], sf1a, sf1b) : null;
   const sf2Winner = (standB[0] && standA[1]) ? findMatchWinner(matches||[], sf2a, sf2b) : null;
+  const champion = (sf1Winner && sf2Winner) ? findMatchWinner(matches||[], sf1Winner, sf2Winner) : null;
   return (
     <div style={{marginTop:8}}>
+      {champion&&(
+        <div style={{background:"linear-gradient(135deg,#1a1000,#2d1f00)",border:"2px solid #FFD700",borderRadius:12,padding:"20px 24px",textAlign:"center",marginBottom:24}}>
+          <div style={{fontSize:32,marginBottom:8}}>🏆</div>
+          <div style={{fontSize:11,color:"#f59e0b",fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Champion</div>
+          <div style={{fontSize:24,fontWeight:800,color:"#FFD700"}}>{champion}</div>
+          <div style={{fontSize:12,color:"#92400e",marginTop:4}}>Tristate Tennis 2026</div>
+        </div>
+      )}
       <div style={{fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:16}}>Knockout Stage</div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:0,overflowX:"auto"}}>
         <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:160}}>
@@ -1032,6 +1041,7 @@ function KnockoutBracket({standA,standB,matches}) {
         <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:160}}>
           <div style={{fontSize:11,color:"#FFD700",fontWeight:800,marginBottom:6,letterSpacing:1}}>🏆 FINAL</div>
           {box(!!sf1Winner,sf1Winner||"Winner SF1")}{vs}{box(!!sf2Winner,sf2Winner||"Winner SF2")}
+          {champion&&<div style={{marginTop:6,fontSize:11,color:"#FFD700",fontWeight:700}}>🏆 {champion}</div>}
         </div>
         <div style={{width:60,height:1,background:"#334155",marginTop:28}}/>
         <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:160}}>
